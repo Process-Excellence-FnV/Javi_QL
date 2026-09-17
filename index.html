@@ -134,7 +134,7 @@
             </button>
 
             <!-- API Key Settings -->
-            <button id="btn-open-settings" title="Claude AI Settings - Enter API Key"
+            <button id="btn-open-settings" title="Google Gemini Settings - Enter API Key"
                 class="p-2 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 transition">
                 <i class="fa-solid fa-gear text-sm"></i>
             </button>
@@ -268,9 +268,9 @@
                                 <div>
                                     <label class="text-xs font-semibold text-slate-300 mb-1.5 block">🤖 Model:</label>
                                     <select id="model-selector" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-brand-500 focus:outline-none transition">
-                                        <option value="claude-sonnet">Sonnet (Fast)</option>
-                                        <option value="claude-opus">Opus (Powerful)</option>
-                                        <option value="claude-haiku">Haiku (Cheap)</option>
+                                        <option value="gemini-3-flash">Gemini 3 Flash (Default)</option>
+                                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Fast)</option>
+                                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fallback)</option>
                                     </select>
                                 </div>
 
@@ -467,7 +467,6 @@
                 <div class="text-xs text-slate-400 mb-1">Affected Rows:</div>
                 <div class="text-lg font-bold text-emerald-400" id="rollback-affected-rows">0 rows</div>
             </div>
-
             <div>
                 <p class="text-xs text-slate-400 mb-2">Rollback SQL that will be executed:</p>
                 <textarea id="rollback-sql-text" class="w-full h-32 bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-emerald-300 focus:outline-none resize-none" readonly></textarea>
@@ -576,13 +575,13 @@
         </div>
     </div>
 
-    <!-- Anthropic API Key Settings Modal -->
+    <!-- Google Gemini API Key Settings Modal -->
     <div id="modal-settings"
         class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h3 class="font-bold text-slate-100 text-sm flex items-center gap-2">
-                    <i class="fa-solid fa-key text-purple-400"></i> Claude AI Configuration
+                    <i class="fa-solid fa-key text-purple-400"></i> Google Gemini Configuration
                 </h3>
                 <button class="close-modal text-slate-500 hover:text-slate-300 text-sm">
                     <i class="fa-solid fa-xmark"></i>
@@ -591,20 +590,20 @@
 
             <div class="space-y-3">
                 <p class="text-xs text-slate-400">
-                    Natural Language to SQL powered by Claude AI. Each user provides their own API key.
+                    Natural Language to SQL powered by Google Gemini. Each user provides their own API key.
                 </p>
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1 flex items-center justify-between">
-                        <span>Anthropic API Key</span>
+                        <span>Google Gemini API Key</span>
                         <button type="button" id="btn-toggle-api-visibility" class="text-slate-500 hover:text-slate-300 text-xs">
                             <i class="fa-solid fa-eye text-xs"></i>
                         </button>
                     </label>
-                    <input type="password" id="anthropic-api-key" placeholder="sk-ant-..."
+                    <input type="password" id="gemini-api-key" placeholder="AIza..."
                         class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs font-mono text-slate-200 focus:border-brand-500 focus:outline-none">
                     <p class="text-[10px] text-slate-500 mt-2">
                         <i class="fa-solid fa-info-circle mr-1"></i>
-                        Get a free API key at <a href="https://console.anthropic.com" target="_blank" class="text-brand-400 hover:text-brand-300 underline">console.anthropic.com</a>
+                        Get a free API key at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="text-brand-400 hover:text-brand-300 underline">Google Cloud Console</a>
                     </p>
                 </div>
                 <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400">
@@ -633,6 +632,35 @@
         let currentSchema = {};
         const API_BASE = "http://127.0.0.1:8000/api";
 
+        // Base SQL Schema for local SQLite database
+        const BASE_SCHEMA_SQL = `
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                status TEXT DEFAULT 'active',
+                role TEXT DEFAULT 'User',
+                last_login DATETIME
+            );
+
+            CREATE TABLE IF NOT EXISTS orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                amount DECIMAL(10, 2),
+                status TEXT DEFAULT 'pending',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+
+            INSERT OR IGNORE INTO users (id, name, email, status, role, last_login) VALUES
+                (1, 'John Doe', 'john@example.com', 'active', 'Admin', CURRENT_TIMESTAMP),
+                (2, 'Jane Smith', 'jane@example.com', 'active', 'User', CURRENT_TIMESTAMP);
+
+            INSERT OR IGNORE INTO orders (id, user_id, amount, status, created_at) VALUES
+                (1, 1, 150.00, 'completed', CURRENT_TIMESTAMP),
+                (2, 2, 75.50, 'pending', CURRENT_TIMESTAMP);
+        `;
+
         // Initialize Application - Real Database Only
         async function initApplication() {
             try {
@@ -652,12 +680,29 @@
                 console.log("Backend not responding");
             }
 
-            // No database connected - show connection modal and disable editing
-            console.log("⚠️ No database connected - please connect to a database");
-            document.getElementById('modal-connection').classList.remove('hidden');
-            document.getElementById('sql-editor').disabled = true;
-            document.getElementById('sql-editor').placeholder = "Connect to database first...";
-            document.getElementById('btn-run-sql').disabled = true;
+            // Initialize local SQLite database as fallback
+            try {
+                const SQL = await initSqlJs();
+                db = new SQL.Database();
+
+                // Execute schema creation - split by semicolon and execute each statement
+                const statements = BASE_SCHEMA_SQL.split(';').filter(stmt => stmt.trim());
+                for (const stmt of statements) {
+                    db.run(stmt.trim() + ';');
+                }
+
+                console.log("✅ Local SQLite database initialized");
+                updateConnectionStatus("Local Database Ready", true);
+                isRealDatabase = false;
+                refreshUI();
+            } catch (err) {
+                console.error("Failed to initialize SQLite:", err);
+                console.log("⚠️ No database connected - please connect to a database");
+                document.getElementById('modal-connection').classList.remove('hidden');
+                document.getElementById('sql-editor').disabled = true;
+                document.getElementById('sql-editor').placeholder = "Connect to database first...";
+                document.getElementById('btn-run-sql').disabled = true;
+            }
         }
 
         // Auto-Backup Parser & Automatic CSV Exporter Engine
@@ -1013,9 +1058,9 @@
 
                 if (isRealDatabase) {
                     // Use backend AI with real schema context
-                    const apiKey = document.getElementById('anthropic-api-key').value.trim();
+                    const apiKey = document.getElementById('gemini-api-key').value.trim();
                     if (!apiKey) {
-                        throw new Error("Please enter your Anthropic API key");
+                        throw new Error("Please enter your Google Gemini API key");
                     }
 
                     const response = await fetch(API_BASE + "/generate-sql", {
@@ -1673,8 +1718,8 @@
             }
         }
 
-        window.onload = function () {
-            initApplication();
+        window.onload = async function () {
+            await initApplication();
             populateTableSelector();
 
             // Run SQL button & Hotkey
@@ -1790,7 +1835,7 @@
             if (toggleVisibilityBtn) {
                 toggleVisibilityBtn.addEventListener('click', function(e) {
                     e.preventDefault();
-                    const input = document.getElementById('anthropic-api-key');
+                    const input = document.getElementById('gemini-api-key');
                     const icon = this.querySelector('i');
                     if (input.type === 'password') {
                         input.type = 'text';
