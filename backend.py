@@ -12,7 +12,10 @@ from sqlalchemy import inspect, text, create_engine
 from sqlalchemy.pool import NullPool
 import json
 from datetime import datetime
-import google.generativeai as genai
+try:
+    import google.genai as genai
+except ImportError:
+    import google.generativeai as genai
 
 app = FastAPI(title="SafeSQL Backend")
 
