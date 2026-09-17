@@ -1,0 +1,2160 @@
+<!DOCTYPE html>
+<html lang="en" class="dark h-full">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeSQL AI Enterprise - Smart Query Runner & Auto-Backup Tool</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81'
+                        },
+                        emerald: {
+                            500: '#10b981',
+                            600: '#059669'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome Icons & Lucide support -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- SQL.js for Wasm SQLite Database Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        code,
+        textarea,
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Glassmorphism and Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        @keyframes pulseGlow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+            }
+
+            50% {
+                box-shadow: 0 0 25px rgba(99, 102, 241, 0.5);
+            }
+        }
+
+        .pulse-active {
+            animation: pulseGlow 2s infinite;
+        }
+    </style>
+</head>
+
+<body
+    class="h-full bg-slate-950 text-slate-100 flex flex-col antialiased overflow-hidden selection:bg-brand-500 selection:text-white">
+
+    <!-- Top Global Header -->
+    <header
+        class="border-b border-slate-800 bg-slate-900/90 backdrop-blur px-6 py-3 flex items-center justify-between z-30 shrink-0">
+        <div class="flex items-center gap-4">
+            <div
+                class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/25">
+                <i class="fa-solid fa-shield-halved text-xl"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-extrabold text-lg tracking-tight text-white flex items-center gap-2">
+                        SafeSQL <span
+                            class="bg-gradient-to-r from-brand-400 to-purple-400 bg-clip-text text-transparent font-medium">AI
+                            Enterprise</span>
+                    </h1>
+                    <span
+                        class="text-[10px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <i class="fa-solid fa-bolt text-[9px]"></i> Auto-Backup Active
+                    </span>
+                </div>
+                <p class="text-xs text-slate-400">Zero-Loss SQL Execution Engine with Instant CSV Download & AI
+                    Synthesis</p>
+            </div>
+        </div>
+
+        <!-- Connection & API Key Controls -->
+        <div class="flex items-center gap-3">
+            <!-- Connection Status Button -->
+            <button id="btn-open-conn-modal"
+                class="px-3.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition flex items-center gap-2">
+                <span id="conn-status-dot" class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                <span id="conn-status-label">No Database Connected</span>
+                <i class="fa-solid fa-plug text-slate-400 text-[10px] ml-1"></i>
+            </button>
+
+            <!-- API Key Settings -->
+            <button id="btn-open-settings" title="Claude AI Settings - Enter API Key"
+                class="p-2 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 transition">
+                <i class="fa-solid fa-gear text-sm"></i>
+            </button>
+
+            <div class="h-4 w-px bg-slate-800 mx-1"></div>
+
+            <button id="btn-reset-db" title="Reset DB State"
+                class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition flex items-center gap-1.5">
+                <i class="fa-solid fa-rotate-left"></i> Reset Data
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Sidebar Navigation & Schema Browser -->
+        <aside class="w-72 border-r border-slate-800/80 bg-slate-900/50 flex flex-col shrink-0">
+            <!-- Database Overview Bar -->
+            <div class="p-4 border-b border-slate-800/80 bg-slate-900/40">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-database text-brand-400"></i> Active Schema
+                    </h2>
+                    <span id="stat-table-count"
+                        class="text-[10px] bg-brand-500/10 text-brand-300 border border-brand-500/20 px-2 py-0.5 rounded font-mono font-bold">2
+                        Tables</span>
+                </div>
+                <div class="relative mt-2">
+                    <input type="text" id="schema-search" placeholder="Filter tables or columns..."
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500">
+                    <i class="fa-solid fa-magnifying-glass absolute right-2.5 top-2.5 text-slate-500 text-[10px]"></i>
+                </div>
+            </div>
+
+            <!-- Dynamic Schema List -->
+            <div id="schema-container" class="flex-1 overflow-y-auto p-3 space-y-3">
+                <!-- Tables & Columns injected dynamically -->
+            </div>
+
+            <!-- Metrics Summary Widget -->
+            <div class="p-4 border-t border-slate-800 bg-slate-950/60 space-y-2">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Backup Protection Stats
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                        <div class="text-[10px] text-slate-400">Backups Saved</div>
+                        <div id="stat-backup-count" class="text-base font-extrabold text-emerald-400 font-mono">0</div>
+                    </div>
+                    <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                        <div class="text-[10px] text-slate-400">Rows Protected</div>
+                        <div id="stat-rows-count" class="text-base font-extrabold text-brand-400 font-mono">0</div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                    <span>Auto-CSV Download:</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="toggle-auto-download" class="sr-only peer" checked>
+                        <div
+                            class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500">
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Main Workspace -->
+        <main class="flex-1 flex flex-col min-w-0 bg-slate-950">
+
+            <!-- Navigation Tabs Bar -->
+            <div class="border-b border-slate-800 bg-slate-900/60 px-6 flex items-center justify-between shrink-0">
+                <div class="flex gap-2" id="tab-buttons">
+                    <button data-tab="tab-ai-sql"
+                        class="tab-btn px-4 py-3 text-xs font-semibold border-b-2 border-brand-500 text-brand-400 flex items-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i> AI Studio & Query Console
+                    </button>
+                    <button data-tab="tab-inspector"
+                        class="tab-btn px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-table"></i> Live Inspector
+                    </button>
+                    <button data-tab="tab-vault"
+                        class="tab-btn px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left"></i> Vault & Backups
+                        <span id="vault-badge"
+                            class="hidden px-1.5 py-0.2 text-[10px] font-bold bg-emerald-500 text-slate-950 rounded-full">0</span>
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button id="btn-beautify-sql" title="Format SQL Query"
+                        class="px-2.5 py-1 text-xs text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800 rounded-lg hover:border-slate-700 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-code"></i> Format
+                    </button>
+                    <button id="btn-explain-sql" title="Run EXPLAIN / Dry Run"
+                        class="px-2.5 py-1 text-xs text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg hover:bg-amber-500/20 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-cat"></i> Dry Run / Safety Check
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab Content Workspace -->
+            <div class="flex-1 overflow-hidden relative">
+
+                <!-- TAB 1: AI STUDIO & QUERY CONSOLE -->
+                <div id="tab-ai-sql" class="tab-content h-full flex flex-col p-6 space-y-4 overflow-y-auto scroll-smooth" style="scroll-behavior: smooth;">
+
+                    <!-- Quick Table Search -->
+                    <div class="glass-card rounded-2xl p-4 border border-brand-500/20 shadow-lg mb-4">
+                        <div class="flex items-center justify-between mb-4">
+                            <label class="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-2">
+                                <i class="fa-solid fa-table text-brand-400"></i> Query Builder
+                            </label>
+                        </div>
+
+                        <div class="space-y-3">
+                            <!-- Row 1: Table Search with Filter -->
+                            <div>
+                                <label class="text-xs font-semibold text-slate-300 mb-1.5 block">📋 Search & Select Table:</label>
+                                <div class="flex gap-2">
+                                    <input type="text" id="table-search-input"
+                                        placeholder="Type table name..."
+                                        class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:border-brand-500 focus:outline-none transition">
+                                    <select id="table-selector" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-brand-500 focus:outline-none transition">
+                                        <option value="">-- Select --</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Row 2: Model & Limit -->
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-300 mb-1.5 block">🤖 Model:</label>
+                                    <select id="model-selector" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-brand-500 focus:outline-none transition">
+                                        <option value="claude-sonnet">Sonnet (Fast)</option>
+                                        <option value="claude-opus">Opus (Powerful)</option>
+                                        <option value="claude-haiku">Haiku (Cheap)</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-300 mb-1.5 block">📊 Limit:</label>
+                                    <select id="limit-selector" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:border-brand-500 focus:outline-none transition">
+                                        <option value="10">10 rows</option>
+                                        <option value="50" selected>50 rows</option>
+                                        <option value="100">100 rows</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Row 2: Filter -->
+                            <div>
+                                <label class="text-xs font-semibold text-slate-300 mb-1.5 block">Filter (WHERE clause):</label>
+                                <input type="text" id="search-filter"
+                                    placeholder="e.g., status = 'active' AND id > 10"
+                                    class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:border-brand-500 focus:outline-none transition">
+                            </div>
+
+                            <!-- Row 3: Buttons -->
+                            <div class="grid grid-cols-3 gap-2">
+                                <button id="btn-search-table" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5">
+                                    <i class="fa-solid fa-magnifying-glass"></i> Search
+                                </button>
+                                <button id="btn-count-rows" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5">
+                                    <i class="fa-solid fa-hashtag"></i> Count
+                                </button>
+                                <button id="btn-clear-search" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition">
+                                    <i class="fa-solid fa-xmark"></i> Clear
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <!-- Code Editor Box -->
+                    <div
+                        class="flex-1 flex flex-col min-h-[220px] bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-inner focus-within:border-brand-500 transition">
+                        <div
+                            class="bg-slate-900/80 px-4 py-2 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                            <span class="font-mono text-slate-300 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-brand-400"></i> SQL Input Console
+                            </span>
+                            <div class="flex items-center gap-3 text-[11px] text-slate-500">
+                                <span>Press <kbd
+                                        class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-mono text-slate-300">Ctrl
+                                        + Enter</kbd> to execute</span>
+                            </div>
+                        </div>
+
+                        <textarea id="sql-editor"
+                            class="flex-1 w-full bg-transparent p-4 font-mono text-sm text-slate-100 placeholder-slate-600 focus:outline-none resize-none leading-relaxed"
+                            spellcheck="false"
+                            placeholder="Enter custom SQL query or generate using AI above..."></textarea>
+
+                        <div
+                            class="bg-slate-900/90 px-4 py-3 border-t border-slate-800 flex items-center justify-between">
+                            <div class="text-xs text-slate-400 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                <span class="hidden sm:inline">Automatic target row extraction and CSV download active
+                                    for UPDATE & DELETE.</span>
+                            </div>
+                            <button id="btn-run-sql"
+                                class="px-6 py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-lg shadow-emerald-600/20 transition flex items-center gap-2">
+                                <i class="fa-solid fa-play"></i> Run Query
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Auto-Backup Downloaded Banner -->
+                    <div id="backup-notification"
+                        class="hidden bg-emerald-950/80 border border-emerald-500/40 rounded-xl p-4 text-xs text-emerald-200 flex items-center justify-between shadow-xl transition animate-fade-in">
+                        <div class="flex items-center gap-3">
+                            <div
+                                class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 text-lg">
+                                <i class="fa-solid fa-file-arrow-down"></i>
+                            </div>
+                            <div>
+                                <div class="font-bold text-emerald-300 flex items-center gap-2">
+                                    <span>Target Rows Backup Created & CSV Downloaded</span>
+                                    <span id="notif-time" class="text-[10px] font-normal text-emerald-400/70">12:34:56
+                                        PM</span>
+                                </div>
+                                <p id="notif-desc" class="text-emerald-200/80 mt-0.5">Captured 2 rows prior to
+                                    modification.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <a id="notif-download-link" href="#" download
+                                class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg transition flex items-center gap-1.5">
+                                <i class="fa-solid fa-download"></i> Download CSV Again
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Query Execution Output Panel -->
+                    <div
+                        class="flex-1 flex flex-col bg-slate-950 rounded-xl border border-slate-800 overflow-hidden min-h-[200px]">
+                        <div
+                            class="bg-slate-900/80 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between text-xs font-medium text-slate-300">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-list-check text-slate-400"></i> Execution Results & Query
+                                Performance
+                            </span>
+                            <span id="result-stats" class="text-[11px] text-slate-500 font-mono">No query
+                                executed</span>
+                        </div>
+
+                        <div id="result-container"
+                            class="flex-1 overflow-auto p-4 flex flex-col items-center justify-center text-center text-slate-500">
+                            <i class="fa-solid fa-terminal text-3xl mb-2 text-slate-800"></i>
+                            <p class="text-xs">Run a SQL statement to view records or modified counts.</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- TAB 2: LIVE INSPECTOR -->
+                <div id="tab-inspector" class="tab-content h-full hidden flex-col p-6 overflow-y-auto space-y-6">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                            <i class="fa-solid fa-table text-brand-400"></i> Database Inspector
+                        </h3>
+                        <p class="text-xs text-slate-400 mt-1">View all tables and their data from the connected database.</p>
+                    </div>
+                    <input type="text" id="inspector-search" placeholder="Search table names..."
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 placeholder-slate-600 focus:border-brand-500 focus:outline-none">
+                    <div id="tables-inspector-grid" class="space-y-6">
+                        <div class="text-center text-slate-500 py-8">
+                            <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                            <p class="text-xs">Loading tables...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: BACKUP VAULT & AUDIT LOG -->
+                <div id="tab-vault" class="tab-content h-full hidden flex-col p-6 overflow-y-auto space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                                <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i> Backup Vault & Audit Log
+                            </h3>
+                            <p class="text-xs text-slate-400 mt-1">Auto-generated CSV backups before DELETE/UPDATE queries with rollback capability.</p>
+                        </div>
+                        <button id="btn-clear-vault"
+                            class="px-3 py-1.5 text-xs text-slate-400 hover:text-rose-400 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition">
+                            <i class="fa-solid fa-trash-can mr-1"></i> Clear Vault
+                        </button>
+                    </div>
+                    <div class="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-900/80 text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-800">
+                                    <tr>
+                                        <th class="p-3">Timestamp</th>
+                                        <th class="p-3">Type</th>
+                                        <th class="p-3">Table</th>
+                                        <th class="p-3">Rows Backed Up</th>
+                                        <th class="p-3 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="vault-log-body" class="divide-y divide-slate-800/60 font-mono text-slate-300">
+                                    <tr>
+                                        <td colspan="5" class="p-8 text-center text-slate-500 font-sans">
+                                            <i class="fa-solid fa-box-archive text-2xl mb-2 text-slate-700 block"></i>
+                                            No backups recorded yet.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Rollback SQL Modal -->
+    <div id="modal-rollback" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="font-bold text-slate-100 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-left text-amber-400"></i> Rollback from Backup
+                </h3>
+                <button class="close-modal text-slate-500 hover:text-slate-300 text-sm">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="bg-slate-950 border border-slate-800/60 rounded-lg p-3">
+                <div class="text-xs text-slate-400 mb-1">Affected Rows:</div>
+                <div class="text-lg font-bold text-emerald-400" id="rollback-affected-rows">0 rows</div>
+            </div>
+
+            <div>
+                <p class="text-xs text-slate-400 mb-2">Rollback SQL that will be executed:</p>
+                <textarea id="rollback-sql-text" class="w-full h-32 bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-emerald-300 focus:outline-none resize-none" readonly></textarea>
+            </div>
+
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                <p class="text-xs text-amber-200">
+                    <i class="fa-solid fa-triangle-exclamation mr-2"></i>
+                    This will undo the DELETE/UPDATE operation on your database
+                </p>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button id="btn-copy-rollback" class="px-4 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-copy"></i> Copy
+                </button>
+                <button id="btn-download-rollback" class="px-4 py-2 text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-download"></i> Download SQL
+                </button>
+                <button id="btn-apply-rollback" class="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-bolt"></i> Apply Rollback
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection Setup Modal -->
+    <div id="modal-connection"
+        class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="font-bold text-slate-100 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-plug text-brand-400"></i> Target Database Connection
+                </h3>
+                <button class="close-modal text-slate-500 hover:text-slate-300 text-sm">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Database Type</label>
+                    <select id="conn-driver"
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:border-brand-500 focus:outline-none">
+                        <option value="postgres">PostgreSQL</option>
+                        <option value="mysql">MySQL / MariaDB</option>
+                        <option value="sqlite">SQLite File</option>
+                    </select>
+                </div>
+
+                <div id="conn-fields-container" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Host</label>
+                        <input type="text" id="conn-host" placeholder="localhost or IP address"
+                            class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 placeholder-slate-600 focus:border-brand-500 focus:outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Port</label>
+                            <input type="text" id="conn-port" placeholder="5432"
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 placeholder-slate-600 focus:border-brand-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Database</label>
+                            <input type="text" id="conn-database" placeholder="dbname"
+                                class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 placeholder-slate-600 focus:border-brand-500 focus:outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Username</label>
+                        <input type="text" id="conn-username" placeholder="username"
+                            class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 placeholder-slate-600 focus:border-brand-500 focus:outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Password</label>
+                        <input type="password" id="conn-password" placeholder="password"
+                            class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 placeholder-slate-600 focus:border-brand-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div id="sqlite-path-container" class="hidden">
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Database File Path</label>
+                    <input type="text" id="sqlite-path" placeholder="C:/path/to/database.db"
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 placeholder-slate-600 focus:border-brand-500 focus:outline-none">
+                </div>
+
+                <div class="p-3 rounded-lg bg-slate-950 border border-slate-800/80 text-[11px] text-slate-400">
+                    <i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i>
+                    All queries execute securely on your database.
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button id="btn-test-conn"
+                    class="px-4 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition">
+                    Test Connection
+                </button>
+                <button
+                    class="close-modal px-4 py-2 text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition">
+                    Save Config
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Anthropic API Key Settings Modal -->
+    <div id="modal-settings"
+        class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="font-bold text-slate-100 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-key text-purple-400"></i> Claude AI Configuration
+                </h3>
+                <button class="close-modal text-slate-500 hover:text-slate-300 text-sm">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <p class="text-xs text-slate-400">
+                    Natural Language to SQL powered by Claude AI. Each user provides their own API key.
+                </p>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1 flex items-center justify-between">
+                        <span>Anthropic API Key</span>
+                        <button type="button" id="btn-toggle-api-visibility" class="text-slate-500 hover:text-slate-300 text-xs">
+                            <i class="fa-solid fa-eye text-xs"></i>
+                        </button>
+                    </label>
+                    <input type="password" id="anthropic-api-key" placeholder="sk-ant-..."
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs font-mono text-slate-200 focus:border-brand-500 focus:outline-none">
+                    <p class="text-[10px] text-slate-500 mt-2">
+                        <i class="fa-solid fa-info-circle mr-1"></i>
+                        Get a free API key at <a href="https://console.anthropic.com" target="_blank" class="text-brand-400 hover:text-brand-300 underline">console.anthropic.com</a>
+                    </p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400">
+                    <i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i>
+                    Your API key is stored locally in your browser. Never shared with our servers.
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                    class="close-modal px-4 py-2 text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition">
+                    Save & Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Global State variables
+        let db = null;
+        let backupVault = [];
+        let totalProtectedRows = 0;
+        let activeRollbackSql = "";
+        let isRealDatabase = false;
+        let currentSchema = {};
+        const API_BASE = "http://127.0.0.1:8000/api";
+
+        // Initialize Application - Real Database Only
+        async function initApplication() {
+            try {
+                const response = await fetch(API_BASE + "/schema");
+                if (response.ok) {
+                    const schema = await response.json();
+                    currentSchema = schema.schema;
+                    isRealDatabase = Object.keys(currentSchema).length > 0;
+                    if (isRealDatabase) {
+                        console.log("✅ Connected to real database!");
+                        updateConnectionStatus("Real Database Connected", true);
+                        refreshUI();
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.log("Backend not responding");
+            }
+
+            // No database connected - show connection modal and disable editing
+            console.log("⚠️ No database connected - please connect to a database");
+            document.getElementById('modal-connection').classList.remove('hidden');
+            document.getElementById('sql-editor').disabled = true;
+            document.getElementById('sql-editor').placeholder = "Connect to database first...";
+            document.getElementById('btn-run-sql').disabled = true;
+        }
+
+        // Auto-Backup Parser & Automatic CSV Exporter Engine
+        function handleAutoBackup(sqlQuery) {
+            const cleanQuery = sqlQuery.trim();
+            const queryType = cleanQuery.split(/\s+/)[0].toUpperCase();
+
+            if (queryType === "UPDATE" || queryType === "DELETE") {
+                let tableName = "";
+                let whereClause = "";
+
+                if (queryType === "UPDATE") {
+                    const match = cleanQuery.match(/UPDATE\s+([^\s]+)(?:\s+SET\s+[\s\S]*?)?(\s+WHERE\s+[\s\S]*)?$/i);
+                    if (match) {
+                        tableName = match[1].replace(/[`"']/g, '');
+                        whereClause = match[2] || "";
+                    }
+                } else if (queryType === "DELETE") {
+                    const match = cleanQuery.match(/DELETE\s+FROM\s+([^\s]+)(\s+WHERE\s+[\s\S]*)?$/i);
+                    if (match) {
+                        tableName = match[1].replace(/[`"']/g, '');
+                        whereClause = match[2] || "";
+                    }
+                }
+
+                if (tableName) {
+                    try {
+                        const backupFetchSql = `SELECT * FROM ${tableName}${whereClause}`;
+                        const res = db.exec(backupFetchSql);
+
+                        if (res.length > 0 && res[0].values.length > 0) {
+                            const columns = res[0].columns;
+                            const values = res[0].values;
+
+                            // 1. Generate CSV Data
+                            const csvData = generateCSV(columns, values);
+                            const timestamp = new Date();
+                            const formattedTime = timestamp.toISOString().replace(/[:.]/g, '-');
+                            const filename = `backup_${queryType}_${tableName}_${formattedTime}.csv`;
+
+                            // 2. Build Download Blob URL
+                            const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+                            const url = URL.createObjectURL(blob);
+
+                            // 3. Generate Reverse SQL Rollback Script
+                            const rollbackSql = generateRollbackScript(queryType, tableName, columns, values);
+
+                            // 4. Record to Audit Vault
+                            const vaultItem = {
+                                id: Date.now(),
+                                timestamp: timestamp.toLocaleTimeString(),
+                                queryType,
+                                tableName,
+                                sql: sqlQuery,
+                                rowsCount: values.length,
+                                filename,
+                                csvData,
+                                downloadUrl: url,
+                                rollbackSql,
+                                columns,
+                                values
+                            };
+
+                            backupVault.unshift(vaultItem);
+                            totalProtectedRows += values.length;
+
+                            // 5. Automatic CSV Trigger (if toggle checked)
+                            const autoDownloadChecked = document.getElementById('toggle-auto-download').checked;
+                            if (autoDownloadChecked) {
+                                autoTriggerDownload(url, filename);
+                            }
+
+                            showBackupNotification(vaultItem);
+                            updateVaultUI();
+                            return vaultItem;
+                        } else {
+                            showBackupNotification(null, "Query executed, but zero rows matched the WHERE condition prior to execution.");
+                        }
+                    } catch (err) {
+                        console.warn("Pre-execution backup fetch skipped/failed:", err);
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Helper to trigger direct browser download
+        function autoTriggerDownload(url, filename) {
+            const tempLink = document.createElement('a');
+            tempLink.href = url;
+            tempLink.setAttribute('download', filename);
+            document.body.appendChild(tempLink);
+            tempLink.click();
+            document.body.removeChild(tempLink);
+        }
+
+        function generateCSV(columns, values) {
+            const header = columns.map(c => `"${c.replace(/"/g, '""')}"`).join(',');
+            const rows = values.map(row =>
+                row.map(val => {
+                    if (val === null) return '""';
+                    return `"${String(val).replace(/"/g, '""')}"`;
+                }).join(',')
+            );
+            return [header, ...rows].join('\n');
+        }
+
+        function generateRollbackScript(type, table, cols, rows) {
+            if (type === "DELETE") {
+                // To reverse a DELETE, we re-INSERT the deleted rows
+                const colNames = cols.join(', ');
+                const insertStatements = rows.map(row => {
+                    const formattedVals = row.map(val => {
+                        if (val === null) return "NULL";
+                        if (typeof val === 'number') return val;
+                        return `'${String(val).replace(/'/g, "''")}'`;
+                    }).join(', ');
+                    return `INSERT INTO ${table} (${colNames}) VALUES (${formattedVals});`;
+                });
+                return insertStatements.join('\n');
+            } else if (type === "UPDATE") {
+                // To reverse an UPDATE, we restore old row values using primary key or row values
+                const pkIndex = cols.indexOf('id') !== -1 ? cols.indexOf('id') : 0;
+                const updateStatements = rows.map(row => {
+                    const setPairs = cols.map((col, idx) => {
+                        const val = row[idx];
+                        const valStr = val === null ? "NULL" : typeof val === 'number' ? val : `'${String(val).replace(/'/g, "''")}'`;
+                        return `${col} = ${valStr}`;
+                    }).join(', ');
+                    const pkVal = row[pkIndex];
+                    const pkValStr = typeof pkVal === 'number' ? pkVal : `'${pkVal}'`;
+                    return `UPDATE ${table} SET ${setPairs} WHERE ${cols[pkIndex]} = ${pkValStr};`;
+                });
+                return updateStatements.join('\n');
+            }
+            return "-- No automated rollback available";
+        }
+
+        function convertToCSV(columns, rows) {
+            let csv = columns.join(',') + '\n';
+            rows.forEach(row => {
+                const values = columns.map(col => {
+                    const val = row[col];
+                    if (val === null || val === undefined) return '';
+                    if (typeof val === 'string' && (val.includes(',') || val.includes('"') || val.includes('\n'))) {
+                        return `"${val.replace(/"/g, '""')}"`;
+                    }
+                    return val;
+                });
+                csv += values.join(',') + '\n';
+            });
+            return csv;
+        }
+
+        function autoDownloadCSV(csv, filename) {
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function generateRollbackFromBackup(queryType, tableName, columns, rows) {
+            if (queryType === "DELETE") {
+                const inserts = rows.map(row => {
+                    const values = columns.map(col => {
+                        const val = row[col];
+                        if (val === null || val === undefined) return 'NULL';
+                        if (typeof val === 'number') return val;
+                        return `'${String(val).replace(/'/g, "''")}'`;
+                    }).join(', ');
+                    return `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values});`;
+                }).join('\n');
+                return inserts;
+            } else if (queryType === "UPDATE") {
+                const updates = rows.map((row, idx) => {
+                    const sets = columns.map(col => {
+                        const val = row[col];
+                        if (val === null || val === undefined) return `${col} = NULL`;
+                        if (typeof val === 'number') return `${col} = ${val}`;
+                        return `${col} = '${String(val).replace(/'/g, "''")}'`;
+                    }).join(', ');
+                    return `UPDATE ${tableName} SET ${sets} WHERE id = ${row.id || idx};`;
+                }).join('\n');
+                return updates;
+            }
+            return "-- Rollback not available for this operation";
+        }
+
+        function updateVaultUI() {
+            const body = document.getElementById('vault-log-body');
+            const badge = document.getElementById('vault-badge');
+
+            if (backupVault.length === 0) {
+                body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500 font-sans"><i class="fa-solid fa-box-archive text-2xl mb-2 text-slate-700 block"></i>No backups recorded yet.</td></tr>`;
+                badge.classList.add('hidden');
+                return;
+            }
+
+            badge.classList.remove('hidden');
+            badge.innerText = backupVault.length;
+
+            body.innerHTML = backupVault.map((item, idx) => `
+                <tr class="hover:bg-slate-800/40">
+                    <td class="p-3">${item.timestamp}</td>
+                    <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${item.type === 'DELETE' ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}">${item.type}</span></td>
+                    <td class="p-3 font-mono text-xs">${item.table}</td>
+                    <td class="p-3">${item.rowsBackedUp} row${item.rowsBackedUp !== 1 ? 's' : ''}</td>
+                    <td class="p-3 text-right">
+                        <button onclick="openRollbackModal(${idx})" class="text-xs text-emerald-400 hover:text-emerald-300 font-semibold">
+                            Rollback <i class="fa-solid fa-arrow-right text-[10px] ml-1"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function executeQuery() {
+            const editor = document.getElementById('sql-editor');
+            const query = editor.value.trim();
+            if (!query) return;
+
+            if (isRealDatabase) {
+                // Execute against real database
+                executeQueryAgainstRealDB(query);
+            } else {
+                // Execute against local SQLite
+                // 1. Run Auto-Backup check & download
+                handleAutoBackup(query);
+
+                // 2. Execute SQL statement
+                try {
+                    const startTime = performance.now();
+                    const results = db.exec(query);
+                    const execTime = (performance.now() - startTime).toFixed(2);
+                    const queryType = query.split(/\s+/)[0].toUpperCase();
+
+                    if (results.length > 0) {
+                        renderTableResult(results[0], execTime);
+                    } else {
+                        const affectedRows = db.getRowsModified();
+                        renderSuccessMessage(queryType, affectedRows, execTime);
+                    }
+
+                    refreshUI();
+                } catch (err) {
+                    renderErrorMessage(err.message);
+                }
+            }
+        }
+
+        async function executeQueryAgainstRealDB(query) {
+            try {
+                const queryType = query.trim().split(/\s+/)[0].toUpperCase();
+
+                // Track which table is being used
+                const tableMatch = query.match(/(?:FROM|UPDATE|DELETE FROM)\s+(\w+)/i);
+                if (tableMatch) {
+                    trackTableUsage(tableMatch[1]);
+                }
+
+                // Create backup before DELETE/UPDATE
+                if (queryType === "DELETE" || queryType === "UPDATE") {
+                    // Extract table name from query
+                    const tableMatch = query.match(/(?:FROM|UPDATE)\s+(\w+)/i);
+                    const tableName = tableMatch ? tableMatch[1] : "unknown";
+
+                    // Convert DELETE/UPDATE to SELECT to get affected rows
+                    let backupQuery = query;
+                    if (queryType === "UPDATE") {
+                        const whereMatch = query.match(/WHERE\s+(.+?)(?:;)?$/i);
+                        backupQuery = `SELECT * FROM ${tableName}${whereMatch ? ' WHERE ' + whereMatch[1] : ''}`;
+                    } else if (queryType === "DELETE") {
+                        const whereMatch = query.match(/WHERE\s+(.+?)(?:;)?$/i);
+                        backupQuery = `SELECT * FROM ${tableName}${whereMatch ? ' WHERE ' + whereMatch[1] : ''}`;
+                    }
+
+                    try {
+                        const backupResponse = await fetch(API_BASE + "/execute-query", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ query: backupQuery, fetch_results: true })
+                        });
+
+                        if (backupResponse.ok) {
+                            const backupResult = await backupResponse.json();
+                            if (backupResult.rows.length > 0) {
+                                const csv = convertToCSV(backupResult.columns, backupResult.rows);
+                                autoDownloadCSV(csv, `${queryType.toLowerCase()}_backup_${tableName}_${Date.now()}.csv`);
+
+                                const vaultItem = {
+                                    timestamp: new Date().toLocaleString(),
+                                    type: queryType,
+                                    table: tableName,
+                                    rowsBackedUp: backupResult.rows.length,
+                                    rollbackSql: generateRollbackFromBackup(queryType, tableName, backupResult.columns, backupResult.rows)
+                                };
+                                backupVault.unshift(vaultItem);
+                                updateVaultUI();
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("Backup creation skipped:", err.message);
+                    }
+                }
+
+                // Execute the actual query
+                const response = await fetch(API_BASE + "/execute-query", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query, fetch_results: true })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    renderErrorMessage(error.detail || "Query execution failed");
+                    return;
+                }
+
+                const result = await response.json();
+
+                if (result.type === "SELECT") {
+                    const columns = result.columns;
+                    const values = result.rows.map(row => columns.map(col => row[col]));
+                    renderTableResult({ columns, values }, result.exec_time);
+                } else {
+                    renderSuccessMessage(queryType, result.affected_rows, result.exec_time);
+                }
+
+                refreshUI();
+            } catch (err) {
+                renderErrorMessage("Error: " + err.message);
+            }
+        }
+
+        // AI SQL Generator with Real Database Support
+        async function generateSqlFromAi() {
+            const promptInput = document.getElementById('ai-prompt-input');
+            const userPrompt = promptInput.value.trim();
+            if (!userPrompt) return;
+
+            const btn = document.getElementById('btn-generate-ai');
+            btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Generating...`;
+            btn.disabled = true;
+
+            try {
+                let sql, explanation, safety;
+
+                if (isRealDatabase) {
+                    // Use backend AI with real schema context
+                    const apiKey = document.getElementById('anthropic-api-key').value.trim();
+                    if (!apiKey) {
+                        throw new Error("Please enter your Anthropic API key");
+                    }
+
+                    const response = await fetch(API_BASE + "/generate-sql", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ prompt: userPrompt, api_key: apiKey })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || "AI generation failed");
+                    }
+                    const result = await response.json();
+                    sql = result.sql;
+                    explanation = result.explanation;
+                    safety = result.safety;
+                } else {
+                    // Client-side generation for local database
+                    const generated = generateSqlFromPrompt(userPrompt);
+                    sql = generated.sql;
+                    explanation = generated.explanation;
+                    safety = generated.safety;
+                }
+
+                document.getElementById('sql-editor').value = sql;
+
+                // Display AI explanation banner
+                const expBox = document.getElementById('ai-explanation-box');
+                document.getElementById('ai-explanation-text').innerText = explanation;
+
+                const badge = document.getElementById('ai-safety-badge');
+                badge.innerText = safety;
+                if (safety === 'High Impact') {
+                    badge.className = "px-2 py-0.5 text-[10px] uppercase font-bold rounded bg-rose-500/20 text-rose-300 border border-rose-500/30";
+                } else if (safety === 'Caution') {
+                    badge.className = "px-2 py-0.5 text-[10px] uppercase font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30";
+                } else {
+                    badge.className = "px-2 py-0.5 text-[10px] uppercase font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+                }
+                expBox.classList.remove('hidden');
+            } catch (err) {
+                console.error(err);
+                alert("Failed to generate SQL: " + err.message);
+            } finally {
+                btn.innerHTML = `<i class="fa-solid fa-sparkles"></i> Generate SQL`;
+                btn.disabled = false;
+            }
+        }
+
+        // Smart SQL Generation from Natural Language Prompt
+        function generateSqlFromPrompt(prompt) {
+            const lowerPrompt = prompt.toLowerCase();
+
+            // Get available tables and columns from schema
+            const tables = getTables();
+
+            let sql = "";
+            let explanation = "";
+            let safety = "Safe";
+
+            // DELETE patterns
+            if (lowerPrompt.includes("delete") || lowerPrompt.includes("remove")) {
+                safety = "High Impact";
+                if (lowerPrompt.includes("inactive") || lowerPrompt.includes("suspended")) {
+                    sql = "DELETE FROM users WHERE status IN ('inactive', 'suspended');";
+                    explanation = "Deletes all inactive or suspended user accounts from the system.";
+                } else if (lowerPrompt.includes("pending")) {
+                    sql = "DELETE FROM orders WHERE status = 'pending' AND created_at < date('now', '-30 days');";
+                    explanation = "Removes pending orders older than 30 days.";
+                } else if (lowerPrompt.includes("id")) {
+                    const ids = prompt.match(/\b\d+\b/g);
+                    if (ids) {
+                        sql = `DELETE FROM users WHERE id IN (${ids.join(', ')});`;
+                        explanation = `Deletes user records with IDs: ${ids.join(', ')}.`;
+                    } else {
+                        sql = "DELETE FROM users WHERE id = 1;";
+                        explanation = "Delete user by ID (modify the ID as needed).";
+                    }
+                } else {
+                    sql = "DELETE FROM users WHERE status = 'inactive';";
+                    explanation = "Deletes inactive users (adjust WHERE clause as needed).";
+                }
+            }
+            // UPDATE patterns
+            else if (lowerPrompt.includes("update") || lowerPrompt.includes("set") || lowerPrompt.includes("change")) {
+                safety = "Caution";
+                if (lowerPrompt.includes("status")) {
+                    if (lowerPrompt.includes("archived")) {
+                        sql = "UPDATE users SET status = 'archived' WHERE last_login < '2025-01-01';";
+                        explanation = "Archives users who haven't logged in since January 2025.";
+                    } else if (lowerPrompt.includes("active")) {
+                        sql = "UPDATE users SET status = 'active' WHERE id > 0;";
+                        explanation = "Updates user status to active for qualifying records.";
+                    } else {
+                        sql = "UPDATE users SET status = 'archived' WHERE status = 'inactive';";
+                        explanation = "Updates inactive users to archived status.";
+                    }
+                } else if (lowerPrompt.includes("orders") && lowerPrompt.includes("cancel")) {
+                    sql = "UPDATE orders SET status = 'cancelled' WHERE amount < 100.00;";
+                    explanation = "Cancels orders with amounts less than $100.";
+                } else {
+                    sql = "UPDATE users SET status = 'active' WHERE status = 'suspended';";
+                    explanation = "General user status update query.";
+                }
+            }
+            // SELECT patterns
+            else if (lowerPrompt.includes("select") || lowerPrompt.includes("show") || lowerPrompt.includes("list") || lowerPrompt.includes("find")) {
+                safety = "Safe";
+                if (lowerPrompt.includes("inactive")) {
+                    sql = "SELECT * FROM users WHERE status = 'inactive' ORDER BY last_login DESC;";
+                    explanation = "Retrieves all inactive users sorted by last login date.";
+                } else if (lowerPrompt.includes("pending")) {
+                    sql = "SELECT u.*, o.* FROM users u JOIN orders o ON u.id = o.user_id WHERE o.status = 'pending';";
+                    explanation = "Shows users and their pending orders.";
+                } else if (lowerPrompt.includes("admin")) {
+                    sql = "SELECT * FROM users WHERE role = 'Admin';";
+                    explanation = "Lists all users with Admin role.";
+                } else if (lowerPrompt.includes("recent") || lowerPrompt.includes("high")) {
+                    sql = "SELECT * FROM orders WHERE amount > 100 ORDER BY created_at DESC LIMIT 10;";
+                    explanation = "Shows 10 most recent high-value orders (>$100).";
+                } else if (lowerPrompt.includes("revenue") || lowerPrompt.includes("total")) {
+                    sql = "SELECT SUM(amount) as total_revenue, COUNT(*) as order_count FROM orders WHERE status = 'completed';";
+                    explanation = "Calculates total revenue and completed order count.";
+                } else if (lowerPrompt.includes("user")) {
+                    sql = "SELECT * FROM users;";
+                    explanation = "Retrieves all user records from the database.";
+                } else if (lowerPrompt.includes("order")) {
+                    sql = "SELECT * FROM orders;";
+                    explanation = "Retrieves all order records from the database.";
+                } else {
+                    sql = "SELECT * FROM users LIMIT 10;";
+                    explanation = "Retrieves first 10 user records.";
+                }
+            }
+            // INSERT patterns (less common but supported)
+            else if (lowerPrompt.includes("insert") || lowerPrompt.includes("add")) {
+                safety = "Caution";
+                sql = "INSERT INTO users (name, email, status, role, last_login) VALUES ('New User', 'newuser@company.com', 'active', 'User', date('now'));";
+                explanation = "Adds a new user record to the database.";
+            }
+            // Default: assume SELECT all
+            else {
+                safety = "Safe";
+                sql = "SELECT * FROM users LIMIT 20;";
+                explanation = "Generic query - showing first 20 users. Refine your request for specific data.";
+            }
+
+            return { sql: sql.trim(), explanation, safety };
+        }
+
+        // Helper to get table list from schema
+        function getTables() {
+            if (!db) return [];
+            const res = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+            return res.length > 0 ? res[0].values.map(t => t[0]) : [];
+        }
+
+        // Schema Text Helper for AI
+        function getSchemaSummaryText() {
+            if (!db) return "";
+            const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+            if (tablesRes.length === 0) return "";
+
+            let summary = "";
+            tablesRes[0].values.forEach(t => {
+                const tableName = t[0];
+                const info = db.exec(`PRAGMA table_info(${tableName});`);
+                if (info[0]) {
+                    const cols = info[0].values.map(c => `${c[1]} (${c[2]})`).join(', ');
+                    summary += `Table '${tableName}': ${cols}\n`;
+                }
+            });
+            return summary;
+        }
+
+        function renderTableResult(result, execTime) {
+            const container = document.getElementById('result-container');
+            const stats = document.getElementById('result-stats');
+
+            stats.innerHTML = `<span class="text-emerald-400 font-bold">${result.values.length} row(s) returned</span> (${execTime} ms)`;
+
+            container.innerHTML = `
+                <div class="w-full h-full overflow-auto">
+                    <table class="w-full text-left text-xs font-mono">
+                        <thead class="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider sticky top-0 border-b border-slate-800">
+                            <tr>
+                                ${result.columns.map(c => `<th class="p-3 font-semibold">${c}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/60 text-slate-200">
+                            ${result.values.map(row => `
+                                <tr class="hover:bg-slate-900/50 transition">
+                                    ${row.map(cell => `<td class="p-3 whitespace-nowrap">${cell !== null ? cell : '<span class="text-slate-600">NULL</span>'}</td>`).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function renderSuccessMessage(type, affectedRows, execTime) {
+            const container = document.getElementById('result-container');
+            const stats = document.getElementById('result-stats');
+
+            stats.innerHTML = `<span class="text-emerald-400 font-bold">${affectedRows} row(s) affected</span> (${execTime} ms)`;
+
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full text-slate-300">
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-3 text-xl">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <div class="font-bold text-sm text-slate-100">${type} Executed Successfully</div>
+                    <p class="text-xs text-slate-400 mt-1">${affectedRows} record(s) modified or updated in database.</p>
+                </div>
+            `;
+        }
+
+        function renderErrorMessage(msg) {
+            const container = document.getElementById('result-container');
+            const stats = document.getElementById('result-stats');
+
+            stats.innerHTML = `<span class="text-rose-400 font-bold">Execution Error</span>`;
+
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full p-6 text-rose-300 max-w-lg">
+                    <div class="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mb-3 text-xl">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                    <div class="font-bold text-sm text-rose-200">SQL Execution Failure</div>
+                    <p class="text-xs font-mono bg-rose-950/40 border border-rose-500/20 p-3 rounded-lg mt-2 text-rose-300 w-full text-left break-all">${msg}</p>
+                </div>
+            `;
+        }
+
+        function showBackupNotification(item, altMsg) {
+            const notif = document.getElementById('backup-notification');
+            const notifDesc = document.getElementById('notif-desc');
+            const notifTime = document.getElementById('notif-time');
+            const link = document.getElementById('notif-download-link');
+
+            notif.classList.remove('hidden');
+
+            if (item) {
+                notifTime.innerText = item.timestamp;
+                notifDesc.innerText = `Captured ${item.rowsCount} matching target row(s) from '${item.tableName}' and auto-downloaded CSV.`;
+                link.href = item.downloadUrl;
+                link.download = item.filename;
+            } else {
+                notifTime.innerText = new Date().toLocaleTimeString();
+                notifDesc.innerText = altMsg || "Backup checked, but no matching target rows were found.";
+            }
+        }
+
+        function updateVaultUI() {
+            const body = document.getElementById('vault-log-body');
+            const countElem = document.getElementById('stat-backup-count');
+            const rowsElem = document.getElementById('stat-rows-count');
+            const badge = document.getElementById('vault-badge');
+
+            countElem.innerText = backupVault.length;
+            rowsElem.innerText = totalProtectedRows;
+
+            if (backupVault.length > 0) {
+                badge.classList.remove('hidden');
+                badge.innerText = backupVault.length;
+            } else {
+                badge.classList.add('hidden');
+            }
+
+            if (backupVault.length === 0) {
+                body.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="p-8 text-center text-slate-500 font-sans">
+                            <i class="fa-solid fa-box-archive text-2xl mb-2 text-slate-700 block"></i>
+                            No modifying queries recorded yet.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            body.innerHTML = backupVault.map((item, idx) => `
+                <tr class="hover:bg-slate-900/50 transition">
+                    <td class="p-3 text-slate-400 whitespace-nowrap">${item.timestamp}</td>
+                    <td class="p-3">
+                        <span class="px-2 py-0.5 text-[10px] font-bold rounded ${item.queryType === 'UPDATE' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}">
+                            ${item.queryType}
+                        </span>
+                    </td>
+                    <td class="p-3 font-bold text-slate-200">${item.tableName}</td>
+                    <td class="p-3 text-slate-400 max-w-xs truncate" title="${item.sql}">${item.sql}</td>
+                    <td class="p-3 text-emerald-400 font-bold">${item.rowsCount} row(s)</td>
+                    <td class="p-3 text-right space-x-1 whitespace-nowrap">
+                        <button onclick="openRollbackModal(${idx})" class="px-2 py-1 text-[11px] font-sans bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 rounded font-bold border border-amber-500/30 transition">
+                            <i class="fa-solid fa-rotate-left"></i> Rollback
+                        </button>
+                        <a href="${item.downloadUrl}" download="${item.filename}" class="px-2 py-1 text-[11px] font-sans bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 rounded font-bold border border-emerald-500/30 transition inline-flex items-center gap-1">
+                            <i class="fa-solid fa-download"></i> CSV
+                        </a>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        let inspectorCurrentPage = 1;
+        const TABLES_PER_PAGE = 25;
+
+        // Refresh Inspector with Pagination for 500+ tables
+        async function updateInspectorForRealDB() {
+            if (!currentSchema || Object.keys(currentSchema).length === 0) return;
+
+            const inspectorGrid = document.getElementById('tables-inspector-grid');
+            const allTables = Object.keys(currentSchema);
+
+            // Calculate stats
+            const now = new Date();
+            const last24h = now.getTime() - (24 * 60 * 60 * 1000);
+            const totalPages = Math.ceil(allTables.length / TABLES_PER_PAGE);
+
+            // Header
+            let inspectorHtml = `
+                <div class="bg-slate-900 border border-slate-800 rounded-lg p-3 mb-6 sticky top-0 z-10">
+                    <div class="text-sm font-bold text-slate-100">Total Tables: <span class="text-brand-400">${allTables.length}</span></div>
+                </div>
+            `;
+
+            // Pagination
+            const startIdx = (inspectorCurrentPage - 1) * TABLES_PER_PAGE;
+            const endIdx = Math.min(startIdx + TABLES_PER_PAGE, allTables.length);
+            const pageTables = allTables.slice(startIdx, endIdx);
+
+            // Table cards (with expand/collapse)
+            for (const tableName of pageTables) {
+                const tableSchema = currentSchema[tableName];
+                const columns = tableSchema.columns || [];
+                const cardId = `card_${tableName}`;
+
+                inspectorHtml += `
+                    <div class="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden hover:border-slate-700 transition">
+                        <div class="bg-slate-900/80 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+                            <div class="font-bold text-xs text-slate-200 flex items-center gap-2">
+                                <i class="fa-solid fa-database text-brand-400"></i> ${tableName}
+                                <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">${columns.length} cols</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="toggleTableColumns('${cardId}')" class="text-xs text-slate-400 hover:text-slate-200 font-semibold flex items-center gap-1">
+                                    <i class="fa-solid fa-chevron-down text-[10px]"></i> <span class="hidden sm:inline">Expand</span>
+                                </button>
+                                <button onclick="quickSelectTable('${tableName}')" class="text-xs text-brand-400 hover:text-brand-300 font-semibold flex items-center gap-1">
+                                    <i class="fa-solid fa-play text-[10px]"></i> Query
+                                </button>
+                                <button onclick="deleteTable('${tableName}')" class="text-xs text-rose-400 hover:text-rose-300 font-semibold flex items-center gap-1">
+                                    <i class="fa-solid fa-trash text-[10px]"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                        <div class="p-4 space-y-2 columns-content-${cardId}">
+                            ${columns.map(col => `
+                                <div class="flex items-center justify-between text-xs font-mono text-slate-400 bg-slate-900/40 p-2 rounded">
+                                    <span>${col.name}</span>
+                                    <span class="text-slate-600 text-[10px]">${col.type}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Add expand/collapse function
+            window.toggleTableColumns = function(cardId) {
+                const button = event.target.closest('button');
+                const icon = button.querySelector('i');
+                icon.classList.toggle('fa-chevron-down');
+                icon.classList.toggle('fa-chevron-up');
+            };
+
+            // Pagination controls
+            inspectorHtml += `
+                <div class="flex items-center justify-center gap-3 mt-6 sticky bottom-0 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <button onclick="prevInspectorPage()" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition" ${inspectorCurrentPage === 1 ? 'disabled style="opacity:0.5; cursor:not-allowed"' : ''}>
+                        <i class="fa-solid fa-chevron-left"></i> Prev
+                    </button>
+                    <span class="text-xs text-slate-400 font-mono">Page ${inspectorCurrentPage}/${totalPages} (${startIdx + 1}-${endIdx} of ${allTables.length})</span>
+                    <button onclick="nextInspectorPage()" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition" ${inspectorCurrentPage === totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed"' : ''}>
+                        Next <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                </div>
+            `;
+
+            inspectorGrid.innerHTML = inspectorHtml;
+        }
+
+        function nextInspectorPage() {
+            const allTables = Object.keys(currentSchema);
+            const totalPages = Math.ceil(allTables.length / TABLES_PER_PAGE);
+            if (inspectorCurrentPage < totalPages) {
+                inspectorCurrentPage++;
+                updateInspectorForRealDB();
+            }
+        }
+
+        function prevInspectorPage() {
+            if (inspectorCurrentPage > 1) {
+                inspectorCurrentPage--;
+                updateInspectorForRealDB();
+            }
+        }
+
+        async function deleteTable(tableName) {
+            if (!confirm(`Are you sure you want to delete the table "${tableName}"? \n\nCSV backup will be automatically downloaded before deletion.`)) {
+                return;
+            }
+
+            try {
+                // Step 1: Fetch all data from table and auto-download CSV
+                const fetchResponse = await fetch(API_BASE + "/execute-query", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: `SELECT * FROM ${tableName};`, fetch_results: true })
+                });
+
+                if (fetchResponse.ok) {
+                    const data = await fetchResponse.json();
+                    if (data.rows && data.rows.length > 0) {
+                        const csv = convertToCSV(data.columns, data.rows);
+                        autoDownloadCSV(csv, `backup_before_delete_${tableName}_${Date.now()}.csv`);
+                    }
+                }
+
+                // Step 2: Delete the table
+                const deleteResponse = await fetch(API_BASE + "/execute-query", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: `DROP TABLE ${tableName};`, fetch_results: false })
+                });
+
+                if (!deleteResponse.ok) {
+                    const error = await deleteResponse.json();
+                    alert("❌ Failed to delete table: " + error.detail);
+                    return;
+                }
+
+                alert(`✅ Table "${tableName}" deleted successfully!\n✅ CSV backup downloaded`);
+
+                // Reload schema
+                delete currentSchema[tableName];
+                await updateInspectorForRealDB();
+                updateSidebarForRealDB();
+            } catch (err) {
+                alert("❌ Error deleting table: " + err.message);
+            }
+        }
+
+        function refreshUI() {
+            const schemaContainer = document.getElementById('schema-container');
+
+            // Use real database schema if connected
+            if (isRealDatabase && Object.keys(currentSchema).length > 0) {
+                updateSidebarForRealDB();
+                return;
+            }
+
+            // Fallback to SQLite if no real database
+            if (!db) return;
+
+            const tablesRes = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+
+            if (tablesRes.length === 0) {
+                document.getElementById('stat-table-count').innerText = "0 Tables";
+                return;
+            }
+
+            const tables = tablesRes[0].values.map(t => t[0]);
+            document.getElementById('stat-table-count').innerText = `${tables.length} Tables`;
+
+            let sidebarHtml = "";
+
+            tables.forEach(table => {
+                const infoRes = db.exec(`PRAGMA table_info(${table});`);
+                const cols = infoRes[0] ? infoRes[0].values.map(c => ({ name: c[1], type: c[2], pk: c[5] })) : [];
+
+                sidebarHtml += `
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 hover:border-slate-700 transition">
+                        <div class="flex items-center justify-between text-xs font-bold text-slate-200 mb-2 cursor-pointer" onclick="quickSelectTable('${table}')">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-table text-brand-400"></i> ${table}
+                            </span>
+                            <i class="fa-solid fa-chevron-right text-slate-600 text-[10px]"></i>
+                        </div>
+                        <div class="space-y-1">
+                            ${cols.map(col => `
+                                <div class="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                                    <span class="flex items-center gap-1">
+                                        ${col.pk ? '<i class="fa-solid fa-key text-amber-400 text-[9px]"></i>' : ''}
+                                        ${col.name}
+                                    </span>
+                                    <span class="text-[9px] text-slate-600 uppercase font-mono">${col.type}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            schemaContainer.innerHTML = sidebarHtml;
+        }
+
+        let currentWorkingTable = null;
+        let tableUsageStats = {};
+
+        function updateSidebarForRealDB() {
+            const schemaContainer = document.getElementById('schema-container');
+            const allTables = Object.keys(currentSchema);
+
+            document.getElementById('stat-table-count').innerText = `${allTables.length} Tables`;
+
+            // Only show current working table
+            if (!currentWorkingTable || !currentSchema[currentWorkingTable]) {
+                schemaContainer.innerHTML = `
+                    <div class="text-center text-slate-500 py-8">
+                        <i class="fa-solid fa-magnifying-glass text-2xl mb-2 text-slate-700 block"></i>
+                        <p class="text-xs">Run a query to view table details</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const tableSchema = currentSchema[currentWorkingTable];
+            const columns = tableSchema.columns || [];
+
+            const sidebarHtml = `
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                    <div class="flex items-center justify-between text-xs font-bold text-slate-200 mb-3 pb-3 border-b border-slate-800">
+                        <span class="flex items-center gap-2">
+                            <i class="fa-solid fa-table text-brand-400"></i> ${currentWorkingTable}
+                        </span>
+                        <span class="text-[10px] bg-brand-500/10 text-brand-300 px-2 py-0.5 rounded">${columns.length} cols</span>
+                    </div>
+                    <div class="space-y-2">
+                        ${columns.map(col => `
+                            <div class="flex items-center justify-between text-[11px] font-mono text-slate-400 bg-slate-950/50 p-2 rounded">
+                                <span class="flex items-center gap-1">
+                                    <i class="fa-solid fa-arrow-right text-slate-600 text-[8px]"></i>
+                                    ${col.name}
+                                </span>
+                                <span class="text-[9px] text-slate-500 uppercase">${col.type}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            schemaContainer.innerHTML = sidebarHtml;
+        }
+
+        function trackTableUsage(tableName) {
+            currentWorkingTable = tableName;
+            const now = new Date();
+
+            if (!tableUsageStats[tableName]) {
+                tableUsageStats[tableName] = { count: 0, lastUsed: now };
+            }
+            tableUsageStats[tableName].count++;
+            updateSidebarForRealDB();
+        }
+
+        function quickSelectTable(table) {
+            document.getElementById('sql-editor').value = `SELECT * FROM ${table};`;
+            document.querySelector('[data-tab="tab-ai-sql"]').click();
+        }
+
+        let currentRollbackIdx = -1;
+
+        function openRollbackModal(idx) {
+            const item = backupVault[idx];
+            if (!item) return;
+
+            currentRollbackIdx = idx;
+            activeRollbackSql = item.rollbackSql;
+            document.getElementById('rollback-sql-text').value = item.rollbackSql;
+            document.getElementById('rollback-affected-rows').innerText = `${item.rowsBackedUp} row${item.rowsBackedUp !== 1 ? 's' : ''}`;
+            document.getElementById('modal-rollback').classList.remove('hidden');
+        }
+
+        function updateConnectionStatus(label, isConnected) {
+            document.getElementById('conn-status-label').innerText = label;
+            const dot = document.getElementById('conn-status-dot');
+            if (isConnected) {
+                dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+            } else {
+                dot.className = "w-2 h-2 rounded-full bg-slate-500";
+            }
+        }
+
+        async function loadRealDatabaseSchema() {
+            try {
+                const response = await fetch(API_BASE + "/schema");
+                if (response.ok) {
+                    const schema = await response.json();
+                    currentSchema = schema.schema;
+                    isRealDatabase = Object.keys(currentSchema).length > 0;
+                    document.getElementById('modal-connection').classList.add('hidden');
+                    updateConnectionStatus("Real Database Connected", true);
+                    await updateInspectorForRealDB();
+                    refreshUI();
+                } else {
+                    alert("Failed to load schema");
+                }
+            } catch (err) {
+                alert("Connection error: " + err.message);
+            }
+        }
+
+        // Populate table selector with database tables
+        function populateTableSelector() {
+            const selector = document.getElementById('table-selector');
+            if (!selector) {
+                console.log('Table selector not found');
+                return;
+            }
+
+            let tables = [];
+
+            // Try to get from real database first
+            if (isRealDatabase && currentSchema && Object.keys(currentSchema).length > 0) {
+                tables = Object.keys(currentSchema).sort();
+                console.log('Tables from real DB:', tables);
+            }
+            // Try SQLite database
+            else if (db) {
+                try {
+                    const res = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+                    if (res.length > 0) {
+                        tables = res[0].values.map(t => t[0]).sort();
+                        console.log('Tables from SQLite:', tables);
+                    }
+                } catch (err) {
+                    console.error('Error fetching tables:', err);
+                }
+            }
+
+            // Add options
+            selector.innerHTML = '<option value="">-- Select a table --</option>';
+            if (tables.length === 0) {
+                selector.innerHTML += '<option disabled>No tables found</option>';
+                console.warn('No tables found in database');
+            } else {
+                tables.forEach(table => {
+                    const option = document.createElement('option');
+                    option.value = table;
+                    option.textContent = table;
+                    selector.appendChild(option);
+                });
+            }
+        }
+
+        window.onload = function () {
+            initApplication();
+            populateTableSelector();
+
+            // Run SQL button & Hotkey
+            document.getElementById('btn-run-sql').addEventListener('click', executeQuery);
+            document.getElementById('sql-editor').addEventListener('keydown', function (e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    executeQuery();
+                }
+            });
+
+            // Old AI listeners removed - using Query Builder now
+
+            // Quick Table Search Functionality - Safe checks
+            const btnSearch = document.getElementById('btn-search-table');
+            const btnClear = document.getElementById('btn-clear-search');
+            const btnCount = document.getElementById('btn-count-rows');
+            const tableSelector = document.getElementById('table-selector');
+            const searchFilter = document.getElementById('search-filter');
+            const limitSelector = document.getElementById('limit-selector');
+            const sqlEditor = document.getElementById('sql-editor');
+
+            if (btnSearch) {
+                btnSearch.addEventListener('click', () => {
+                    console.log('Search button clicked!');
+                    const table = tableSelector ? tableSelector.value : '';
+                    const filter = searchFilter ? searchFilter.value : '';
+                    const limit = limitSelector ? limitSelector.value : '50';
+
+                    if (!table) {
+                        alert('Please select a table first');
+                        return;
+                    }
+
+                    let query = `SELECT * FROM ${table}`;
+                    if (filter) {
+                        query += ` WHERE ${filter}`;
+                    }
+                    query += ` LIMIT ${limit};`;
+
+                    if (sqlEditor) sqlEditor.value = query;
+                    const tab = document.querySelector('[data-tab="tab-ai-sql"]');
+                    if (tab) tab.click();
+                });
+            }
+
+            if (btnClear) {
+                btnClear.addEventListener('click', () => {
+                    if (tableSelector) tableSelector.value = '';
+                    if (searchFilter) searchFilter.value = '';
+                    if (limitSelector) limitSelector.value = '50';
+                });
+            }
+
+            if (btnCount) {
+                btnCount.addEventListener('click', () => {
+                    const table = tableSelector ? tableSelector.value : '';
+                    if (!table) {
+                        alert('Please select a table first');
+                        return;
+                    }
+
+                    let query = `SELECT COUNT(*) as total_rows FROM ${table}`;
+                    const filter = searchFilter ? searchFilter.value : '';
+                    if (filter) {
+                        query += ` WHERE ${filter}`;
+                    }
+                    query += `;`;
+
+                    if (sqlEditor) sqlEditor.value = query;
+                    const tab = document.querySelector('[data-tab="tab-ai-sql"]');
+                    if (tab) tab.click();
+                });
+            }
+
+            // Table search filtering
+            const tableSearchInput = document.getElementById('table-search-input');
+            if (tableSearchInput && tableSelector) {
+                tableSearchInput.addEventListener('input', (e) => {
+                    const searchTerm = e.target.value.toLowerCase().trim();
+                    console.log('Searching for table:', searchTerm);
+
+                    // Filter dropdown options
+                    let visibleCount = 0;
+                    Array.from(tableSelector.options).forEach(opt => {
+                        if (opt.value === '') return; // Keep placeholder
+                        const matches = opt.text.toLowerCase().includes(searchTerm);
+                        opt.style.display = matches ? '' : 'none';
+                        if (matches) visibleCount++;
+                    });
+
+                    // Auto-select if only one match
+                    if (visibleCount === 1 && searchTerm.length > 0) {
+                        const visibleOpt = Array.from(tableSelector.options).find(opt => opt.style.display !== 'none' && opt.value);
+                        if (visibleOpt) {
+                            tableSelector.value = visibleOpt.value;
+                        }
+                    }
+
+                    // Show/hide dropdown
+                    tableSelector.style.display = searchTerm.length > 0 ? 'block' : 'block';
+                });
+
+                // Clear search when dropdown changes
+                tableSelector.addEventListener('change', (e) => {
+                    if (e.target.value) {
+                        tableSearchInput.value = e.target.options[e.target.selectedIndex].text;
+                    }
+                });
+            }
+
+            // Toggle API Key visibility
+            const toggleVisibilityBtn = document.getElementById('btn-toggle-api-visibility');
+            if (toggleVisibilityBtn) {
+                toggleVisibilityBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const input = document.getElementById('anthropic-api-key');
+                    const icon = this.querySelector('i');
+                    if (input.type === 'password') {
+                        input.type = 'text';
+                        icon.classList.remove('fa-eye');
+                        icon.classList.add('fa-eye-slash');
+                    } else {
+                        input.type = 'password';
+                        icon.classList.remove('fa-eye-slash');
+                        icon.classList.add('fa-eye');
+                    }
+                });
+            }
+
+            // SQL Beautifier / Formatter
+            document.getElementById('btn-beautify-sql').addEventListener('click', () => {
+                const editor = document.getElementById('sql-editor');
+                let val = editor.value;
+                val = val.replace(/\s+/g, ' ')
+                    .replace(/\s*SELECT\s*/gi, '\nSELECT ')
+                    .replace(/\s*FROM\s*/gi, '\nFROM ')
+                    .replace(/\s*WHERE\s*/gi, '\nWHERE ')
+                    .replace(/\s*SET\s*/gi, '\nSET ')
+                    .replace(/\s*UPDATE\s*/gi, 'UPDATE ')
+                    .replace(/\s*DELETE FROM\s*/gi, 'DELETE FROM ')
+                    .trim();
+                editor.value = val;
+            });
+
+            // EXPLAIN / Dry Run
+            document.getElementById('btn-explain-sql').addEventListener('click', () => {
+                const query = document.getElementById('sql-editor').value.trim();
+                if (!query) return;
+                try {
+                    const explainRes = db.exec(`EXPLAIN QUERY PLAN ${query}`);
+                    if (explainRes.length > 0) {
+                        renderTableResult(explainRes[0], "0.01");
+                        document.getElementById('result-stats').innerHTML = `<span class="text-amber-400 font-bold">Dry Run / EXPLAIN Simulation Complete</span>`;
+                    }
+                } catch (err) {
+                    renderErrorMessage(`Safety Check Error: ${err.message}`);
+                }
+            });
+
+            // Tab Switching Logic
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetTab = btn.getAttribute('data-tab');
+
+                    document.querySelectorAll('.tab-btn').forEach(b => {
+                        b.classList.remove('border-brand-500', 'text-brand-400');
+                        b.classList.add('border-transparent', 'text-slate-400');
+                    });
+                    btn.classList.add('border-brand-500', 'text-brand-400');
+                    btn.classList.remove('border-transparent', 'text-slate-400');
+
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                    const tabElement = document.getElementById(targetTab);
+                    tabElement.classList.remove('hidden');
+                    tabElement.classList.add('flex');
+
+                    // Scroll to top of tab content
+                    setTimeout(() => {
+                        tabElement.scrollTop = 0;
+                    }, 10);
+                });
+            });
+
+            // Reset DB
+            document.getElementById('btn-reset-db').addEventListener('click', () => {
+                db.run("DROP TABLE IF EXISTS users; DROP TABLE IF EXISTS orders;");
+                db.run(BASE_SCHEMA_SQL);
+                refreshUI();
+                document.getElementById('result-container').innerHTML = `<div class="text-slate-500 text-xs">Database reset to initial clean state.</div>`;
+            });
+
+
+            // Modals Controls
+            document.getElementById('btn-open-conn-modal').addEventListener('click', () => {
+                document.getElementById('modal-connection').classList.remove('hidden');
+            });
+
+            document.getElementById('btn-open-settings').addEventListener('click', () => {
+                document.getElementById('modal-settings').classList.remove('hidden');
+            });
+
+            document.querySelectorAll('.close-modal').forEach(b => {
+                b.addEventListener('click', () => {
+                    document.querySelectorAll('.fixed').forEach(m => m.classList.add('hidden'));
+                });
+            });
+
+
+            // Database type change - show/hide fields
+            document.getElementById('conn-driver').addEventListener('change', (e) => {
+                const driver = e.target.value;
+                const fieldsContainer = document.getElementById('conn-fields-container');
+                const sqliteContainer = document.getElementById('sqlite-path-container');
+
+                if (driver === 'sqlite') {
+                    fieldsContainer.classList.add('hidden');
+                    sqliteContainer.classList.remove('hidden');
+                } else {
+                    fieldsContainer.classList.remove('hidden');
+                    sqliteContainer.classList.add('hidden');
+                    updatePortPlaceholder(driver);
+                }
+            });
+
+            function updatePortPlaceholder(driver) {
+                const portInput = document.getElementById('conn-port');
+                if (driver === 'postgres') {
+                    portInput.placeholder = '5432';
+                } else if (driver === 'mysql') {
+                    portInput.placeholder = '3306';
+                }
+            }
+
+            function buildConnectionString() {
+                const driver = document.getElementById('conn-driver').value;
+
+                if (driver === 'sqlite') {
+                    const path = document.getElementById('sqlite-path').value.trim();
+                    if (!path) {
+                        alert("Please enter database file path");
+                        return null;
+                    }
+                    return `sqlite:///${path}`;
+                }
+
+                const host = document.getElementById('conn-host').value.trim();
+                const port = document.getElementById('conn-port').value.trim();
+                const database = document.getElementById('conn-database').value.trim();
+                const username = document.getElementById('conn-username').value.trim();
+                const password = document.getElementById('conn-password').value.trim();
+
+                if (!host || !database || !username) {
+                    alert("Please fill in all required fields");
+                    return null;
+                }
+
+                // URL-encode username and password to handle special characters like @, :, %, etc
+                const encodedUsername = encodeURIComponent(username);
+                const encodedPassword = encodeURIComponent(password);
+
+                if (driver === 'postgres') {
+                    const p = port || '5432';
+                    // Add SSL mode for cloud databases (Azure, AWS RDS, etc)
+                    return `postgresql://${encodedUsername}:${encodedPassword}@${host}:${p}/${database}?sslmode=require`;
+                } else if (driver === 'mysql') {
+                    const p = port || '3306';
+                    return `mysql+pymysql://${encodedUsername}:${encodedPassword}@${host}:${p}/${database}`;
+                }
+
+                return null;
+            }
+
+            // Test Connection with Backend
+            document.getElementById('btn-test-conn').addEventListener('click', async () => {
+                const connStr = buildConnectionString();
+                if (!connStr) return;
+
+                const btn = document.getElementById('btn-test-conn');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Connecting...';
+
+                try {
+                    const driver = document.getElementById('conn-driver').value;
+
+                    // Test connection
+                    const testResponse = await fetch(API_BASE + "/test-connection", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ connection_string: connStr })
+                    });
+
+                    if (!testResponse.ok) {
+                        const error = await testResponse.json();
+                        alert("❌ Connection failed: " + error.detail);
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        return;
+                    }
+
+                    // Connect to database
+                    const connectResponse = await fetch(API_BASE + "/connect", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ connection_string: connStr, driver })
+                    });
+
+                    if (!connectResponse.ok) {
+                        const error = await connectResponse.json();
+                        alert("❌ Connection failed: " + error.detail);
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        return;
+                    }
+
+                    btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Connected!';
+
+                    // Enable SQL editor
+                    document.getElementById('sql-editor').disabled = false;
+                    document.getElementById('sql-editor').placeholder = "Enter your SQL query here...";
+                    document.getElementById('btn-run-sql').disabled = false;
+
+                    await loadRealDatabaseSchema();
+                    document.getElementById('modal-connection').classList.add('hidden');
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                    }, 1500);
+                } catch (err) {
+                    alert("❌ Error: " + err.message);
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            });
+
+            // Vault Controls
+            document.getElementById('btn-clear-vault').addEventListener('click', () => {
+                if (confirm("Clear all backups from vault?")) {
+                    backupVault = [];
+                    updateVaultUI();
+                }
+            });
+
+            // Rollback Controls
+            document.getElementById('btn-copy-rollback').addEventListener('click', () => {
+                navigator.clipboard.writeText(activeRollbackSql);
+                alert("Rollback SQL copied to clipboard!");
+            });
+
+            document.getElementById('btn-download-rollback').addEventListener('click', () => {
+                if (!activeRollbackSql) return;
+                const element = document.createElement('a');
+                element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(activeRollbackSql));
+                element.setAttribute('download', `rollback_${Date.now()}.sql`);
+                element.style.display = 'none';
+                document.body.appendChild(element);
+                element.click();
+                document.body.removeChild(element);
+            });
+
+            // Apply Rollback Button
+            document.getElementById('btn-apply-rollback').addEventListener('click', async () => {
+                if (!activeRollbackSql) return;
+
+                const btn = document.getElementById('btn-apply-rollback');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Applying...';
+
+                try {
+                    // Execute rollback SQL
+                    const response = await fetch(API_BASE + "/execute-query", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ query: activeRollbackSql, fetch_results: true })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        alert("❌ Rollback failed: " + error.detail);
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        return;
+                    }
+
+                    const result = await response.json();
+                    const affectedRows = result.affected_rows || backupVault[currentRollbackIdx]?.rowsBackedUp || 0;
+
+                    btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Rollback Applied!';
+
+                    setTimeout(() => {
+                        alert(`✅ Rollback successful! ${affectedRows} row(s) restored to original state.`);
+                        document.getElementById('modal-rollback').classList.add('hidden');
+                        refreshUI();
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+
+                        // Refresh the results with the restored data
+                        document.getElementById('sql-editor').value = `SELECT * FROM ${backupVault[currentRollbackIdx]?.table};`;
+                        document.querySelector('[data-tab="tab-ai-sql"]').click();
+                    }, 1500);
+                } catch (err) {
+                    alert("❌ Error applying rollback: " + err.message);
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            });
+
+            // Sidebar Schema Search Functionality
+            const schemaSearch = document.getElementById('schema-search');
+            if (schemaSearch) {
+                schemaSearch.addEventListener('input', (e) => {
+                    const searchTerm = e.target.value.toLowerCase();
+                    const tableCards = document.querySelectorAll('#schema-container > div');
+                    let visibleCount = 0;
+
+                    tableCards.forEach(card => {
+                        const content = card.textContent.toLowerCase();
+                        if (content.includes(searchTerm)) {
+                            card.style.display = '';
+                            visibleCount++;
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+
+                    if (searchTerm && visibleCount === 0 && tableCards.length > 0) {
+                        const container = document.getElementById('schema-container');
+                        container.innerHTML = `
+                            <div class="text-center text-slate-500 py-8">
+                                <i class="fa-solid fa-search text-2xl mb-2 text-slate-700 block"></i>
+                                <p class="text-xs">No tables found matching "${searchTerm}"</p>
+                            </div>
+                        `;
+                    }
+                });
+            }
+
+            // Inspector Search Functionality
+            const inspectorSearch = document.getElementById('inspector-search');
+            if (inspectorSearch) {
+                inspectorSearch.addEventListener('input', (e) => {
+                    const searchTerm = e.target.value.toLowerCase();
+                    const allTables = Object.keys(currentSchema);
+
+                    // Filter tables based on search term
+                    let filteredTables = allTables;
+                    if (searchTerm) {
+                        filteredTables = allTables.filter(table =>
+                            table.toLowerCase().includes(searchTerm)
+                        );
+                    }
+
+                    // Reset to page 1 when searching
+                    inspectorCurrentPage = 1;
+
+                    // Re-render with filtered results
+                    if (filteredTables.length === 0 && searchTerm) {
+                        const grid = document.getElementById('tables-inspector-grid');
+                        grid.innerHTML = `
+                            <div class="text-center text-slate-500 py-8">
+                                <i class="fa-solid fa-search text-2xl mb-2 text-slate-700 block"></i>
+                                <p class="text-xs">No tables found matching "${searchTerm}"</p>
+                            </div>
+                        `;
+                    } else {
+                        // Temporarily store filtered tables and render
+                        const originalSchema = currentSchema;
+                        const tempSchema = {};
+                        filteredTables.forEach(table => {
+                            tempSchema[table] = originalSchema[table];
+                        });
+                        currentSchema = tempSchema;
+                        updateInspectorForRealDB();
+                        currentSchema = originalSchema; // Restore original
+                    }
+                });
+            }
+        };
+    </script>
+</body>
+
+</html>
