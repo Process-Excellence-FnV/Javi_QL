@@ -12,7 +12,7 @@ from sqlalchemy import inspect, text, create_engine
 from sqlalchemy.pool import NullPool
 import json
 from datetime import datetime
-import anthropic
+import google.generativeai as genai
 
 app = FastAPI(title="SafeSQL Backend")
 
@@ -242,7 +242,7 @@ async def get_table_data(req: QueryRequest):
 
 @app.post("/api/generate-sql")
 async def generate_sql(req: AIPromptRequest):
-    """Generate SQL from natural language using Claude AI"""
+    """Generate SQL from natural language using Google Gemini AI"""
     if not db_engine:
         raise HTTPException(status_code=400, detail="Not connected to database")
 
@@ -260,16 +260,11 @@ async def generate_sql(req: AIPromptRequest):
             col_names = ", ".join([f"{col['name']} ({col['type']})" for col in columns])
             schema_context += f"Table '{table_name}': {col_names}\n"
 
-        # Use Claude to generate SQL
-        client = anthropic.Anthropic(api_key=req.api_key)
+        # Configure Gemini with API key
+        genai.configure(api_key=req.api_key)
+        model = genai.GenerativeModel("gemini-3-flash")
 
-        message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=1024,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"""You are a SQL expert. Generate a SQL query based on this request.
+        prompt = f"""You are a SQL expert. Generate a SQL query based on this request.
 
 User Request: {req.prompt}
 
@@ -283,11 +278,9 @@ Instructions:
 4. If the request is ambiguous, make reasonable assumptions
 
 Respond with ONLY the SQL query, nothing else."""
-                }
-            ]
-        )
 
-        sql = message.content[0].text.strip()
+        response = model.generate_content(prompt)
+        sql = response.text.strip()
 
         # Determine safety level
         sql_upper = sql.upper()
@@ -304,10 +297,8 @@ Respond with ONLY the SQL query, nothing else."""
             "explanation": f"Generated SQL for: {req.prompt}",
             "safety": safety
         }
-    except anthropic.APIError as e:
-        raise HTTPException(status_code=400, detail=f"Claude API error: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"SQL generation failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Gemini API error: {str(e)}")
 
 
 if __name__ == "__main__":
