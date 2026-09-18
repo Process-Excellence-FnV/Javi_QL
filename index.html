@@ -132,6 +132,13 @@
 
             
 
+            <!-- User Info -->
+            <button id="btn-user-info" title="User & Query History"
+                class="px-3.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition flex items-center gap-2">
+                <i class="fa-solid fa-user text-brand-400"></i>
+                <span id="user-email-display">Login</span>
+            </button>
+
             <div class="h-4 w-px bg-slate-800 mx-1"></div>
 
             <button id="btn-reset-db" title="Reset DB State"
@@ -510,6 +517,7 @@
         let activeRollbackSql = "";
         let isRealDatabase = false;
         let currentSchema = {};
+        let currentUserEmail = localStorage.getItem('userEmail') || null;
         const API_BASE = "http://127.0.0.1:8000/api";
 
         // Base SQL Schema for local SQLite database
@@ -869,7 +877,7 @@
                         const backupResponse = await fetch(API_BASE + "/execute-query", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ query: backupQuery, fetch_results: true })
+                            body: JSON.stringify({ query: backupQuery, fetch_results: true, email: currentUserEmail })
                         });
 
                         if (backupResponse.ok) {
@@ -898,7 +906,7 @@
                 const response = await fetch(API_BASE + "/execute-query", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ query, fetch_results: true })
+                    body: JSON.stringify({ query, fetch_results: true, email: currentUserEmail })
                 });
 
                 if (!response.ok) {
@@ -1538,6 +1546,23 @@
 
         window.onload = async function () {
             console.log("🔧 Page loaded, initializing...");
+
+            // Get or prompt for user email
+            if (!currentUserEmail) {
+                currentUserEmail = prompt("Enter your email:", "");
+                if (currentUserEmail && currentUserEmail.trim()) {
+                    currentUserEmail = currentUserEmail.trim().toLowerCase();
+                    localStorage.setItem('userEmail', currentUserEmail);
+                    console.log(`✓ User logged in: ${currentUserEmail}`);
+                } else {
+                    currentUserEmail = "anonymous";
+                    console.log("⚠️ No email provided, using anonymous");
+                }
+            }
+
+            // Update UI with user email
+            document.getElementById('user-email-display').textContent = currentUserEmail.split('@')[0] || 'User';
+
             await initApplication();
             console.log("✓ Initialization complete, attaching event listeners...");
 
@@ -1622,6 +1647,33 @@
                 document.getElementById('result-container').innerHTML = `<div class="text-slate-500 text-xs">Database reset to initial clean state.</div>`;
             });
 
+            // User Info & Query History
+            document.getElementById('btn-user-info').addEventListener('click', async () => {
+                try {
+                    const response = await fetch(API_BASE + `/query-history/${currentUserEmail}`);
+                    const data = await response.json();
+
+                    let historyHtml = `<div class="text-sm"><strong>User:</strong> ${data.email}</div>`;
+                    historyHtml += `<div class="text-sm mt-2"><strong>Query History (${data.queries.length}):</strong></div>`;
+
+                    if (data.queries.length === 0) {
+                        historyHtml += `<p class="text-xs text-slate-400 mt-2">No queries executed yet</p>`;
+                    } else {
+                        historyHtml += `<div class="mt-2 text-xs space-y-1 max-h-60 overflow-y-auto">`;
+                        data.queries.slice(-10).reverse().forEach(q => {
+                            historyHtml += `<div class="text-slate-300 border-l border-brand-500 pl-2">
+                                <strong class="text-brand-400">${q.type}</strong> - ${new Date(q.timestamp).toLocaleString()} (${q.exec_time}ms)
+                                <div class="text-slate-400 truncate text-[11px]">${q.query}</div>
+                            </div>`;
+                        });
+                        historyHtml += `</div>`;
+                    }
+
+                    alert(historyHtml.replace(/<[^>]*>/g, '').substring(0, 500) + '...');
+                } catch (err) {
+                    alert(`Error loading history: ${err.message}`);
+                }
+            });
 
             // Modals Controls
             document.getElementById('btn-open-conn-modal').addEventListener('click', () => {

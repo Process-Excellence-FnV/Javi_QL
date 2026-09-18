@@ -12,6 +12,11 @@ from sqlalchemy import inspect, text, create_engine
 from sqlalchemy.pool import NullPool
 import json
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = FastAPI(title="SafeSQL Backend")
 
@@ -28,6 +33,55 @@ app.add_middleware(
 db_engine = None
 db_connection_string = None
 
+# PostgreSQL connection for query logs (from .env)
+DB_USER = os.getenv("DB_USER", "citus")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "test@213").replace("@", "%40")
+DB_HOST = os.getenv("DB_HOST", "c-picking-blr1.soecbxqsdjgd4v.postgres.cosmos.azure.com")
+DB_PORT = os.getenv("DB_PORT", "6432")
+DB_NAME = os.getenv("DB_NAME", "citus1")
+POSTGRES_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+logs_engine = None
+
+def init_logs_db():
+    """Initialize PostgreSQL connection and create logs table"""
+    global logs_engine
+    try:
+        logs_engine = create_engine(POSTGRES_URL)
+        with logs_engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS Javi_QL_logs (
+                    id SERIAL PRIMARY KEY,
+                    email VARCHAR(255),
+                    query TEXT,
+                    query_type VARCHAR(50),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    execution_time FLOAT,
+                    status VARCHAR(20) DEFAULT 'success'
+                )
+            """))
+            conn.commit()
+        print("[OK] Javi_QL_logs table initialized")
+    except Exception as e:
+        print(f"[WARNING] Could not initialize logs DB: {str(e)}")
+
+def log_query_to_db(email, query, query_type, exec_time):
+    """Store query log in PostgreSQL"""
+    try:
+        if logs_engine:
+            with logs_engine.connect() as conn:
+                conn.execute(text("""
+                    INSERT INTO Javi_QL_logs (email, query, query_type, execution_time)
+                    VALUES (:email, :query, :query_type, :exec_time)
+                """), {
+                    "email": email,
+                    "query": query[:500],
+                    "query_type": query_type,
+                    "exec_time": exec_time
+                })
+                conn.commit()
+    except Exception as e:
+        print(f"[WARNING] Could not log query: {str(e)}")
+
 
 class ConnectionConfig(BaseModel):
     connection_string: str
@@ -37,10 +91,76 @@ class ConnectionConfig(BaseModel):
 class QueryRequest(BaseModel):
     query: str
     fetch_results: bool = True
+    email: str = "anonymous"
 
 
 class TestConnectionRequest(BaseModel):
     connection_string: str
+
+
+class QueryLogRequest(BaseModel):
+    email: str
+    query: str
+    fetch_results: bool = True
+
+
+# Store user sessions and query logs in memory (simple approach)
+user_sessions = {}
+query_logs = {}  # {email: [{"query": "...", "timestamp": "...", "type": "..."}]}
+
+
+@app.post("/api/whoami")
+async def whoami(req: QueryLogRequest):
+    """Get current user info and return email"""
+    email = req.email.strip().lower()
+    user_sessions[email] = datetime.now().isoformat()
+
+    if email not in query_logs:
+        query_logs[email] = []
+
+    return {
+        "email": email,
+        "status": "authenticated",
+        "last_seen": user_sessions[email],
+        "total_queries": len(query_logs.get(email, []))
+    }
+
+
+@app.get("/api/query-history/{email}")
+async def get_query_history(email: str):
+    """Get query history for a user from PostgreSQL"""
+    email = email.strip().lower()
+    try:
+        if logs_engine:
+            with logs_engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT query, query_type, timestamp, execution_time
+                    FROM Javi_QL_logs
+                    WHERE email = :email
+                    ORDER BY timestamp DESC
+                    LIMIT 100
+                """), {"email": email})
+
+                queries = []
+                for row in result:
+                    queries.append({
+                        "query": row[0],
+                        "type": row[1],
+                        "timestamp": row[2].isoformat() if row[2] else None,
+                        "exec_time": row[3]
+                    })
+
+                return {
+                    "email": email,
+                    "queries": queries
+                }
+    except Exception as e:
+        print(f"Error fetching history: {str(e)}")
+
+    return {
+        "email": email,
+        "queries": []
+    }
 
 
 @app.post("/api/test-connection")
@@ -176,15 +296,22 @@ async def get_schema():
 
 @app.post("/api/execute-query")
 async def execute_query(req: QueryRequest):
-    """Execute SQL query against database"""
+    """Execute SQL query against database and log it"""
     if not db_engine:
         raise HTTPException(status_code=400, detail="Not connected to database")
+
+    email = req.email.strip().lower()
+    query_type = req.query.strip().split()[0].upper()
+    timestamp = datetime.now().isoformat()
 
     try:
         with db_engine.begin() as conn:
             start_time = datetime.now()
             result = conn.execute(text(req.query))
             exec_time = (datetime.now() - start_time).total_seconds() * 1000
+
+            # Log the query to PostgreSQL
+            log_query_to_db(email, req.query, query_type, round(exec_time, 2))
 
             # For SELECT queries, fetch results
             if req.fetch_results and result.returns_rows:
@@ -236,4 +363,7 @@ async def get_table_data(req: QueryRequest):
 
 if __name__ == "__main__":
     import uvicorn
+    print("[INIT] Initializing Javi_QL logging system...")
+    init_logs_db()
+    print("[OK] Backend ready!")
     uvicorn.run(app, host="127.0.0.1", port=8000)
