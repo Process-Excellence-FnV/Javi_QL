@@ -12,10 +12,6 @@ from sqlalchemy import inspect, text, create_engine
 from sqlalchemy.pool import NullPool
 import json
 from datetime import datetime
-try:
-    import google.genai as genai
-except ImportError:
-    import google.generativeai as genai
 
 app = FastAPI(title="SafeSQL Backend")
 
@@ -41,11 +37,6 @@ class ConnectionConfig(BaseModel):
 class QueryRequest(BaseModel):
     query: str
     fetch_results: bool = True
-
-
-class AIPromptRequest(BaseModel):
-    prompt: str
-    api_key: str
 
 
 class TestConnectionRequest(BaseModel):
@@ -241,67 +232,6 @@ async def get_table_data(req: QueryRequest):
             }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to fetch table data: {str(e)}")
-
-
-@app.post("/api/generate-sql")
-async def generate_sql(req: AIPromptRequest):
-    """Generate SQL from natural language using Google Gemini AI"""
-    if not db_engine:
-        raise HTTPException(status_code=400, detail="Not connected to database")
-
-    if not req.api_key:
-        raise HTTPException(status_code=400, detail="API key required for SQL generation")
-
-    try:
-        # Get real schema for context
-        inspector = inspect(db_engine)
-        tables = inspector.get_table_names()
-
-        schema_context = ""
-        for table_name in tables:
-            columns = inspector.get_columns(table_name)
-            col_names = ", ".join([f"{col['name']} ({col['type']})" for col in columns])
-            schema_context += f"Table '{table_name}': {col_names}\n"
-
-        # Configure Gemini with API key
-        genai.configure(api_key=req.api_key)
-        model = genai.GenerativeModel("gemini-3-flash")
-
-        prompt = f"""You are a SQL expert. Generate a SQL query based on this request.
-
-User Request: {req.prompt}
-
-Database Schema:
-{schema_context}
-
-Instructions:
-1. Write ONLY valid SQL code, no explanation
-2. Use table names and column names exactly as they appear in the schema
-3. Make the query safe and efficient
-4. If the request is ambiguous, make reasonable assumptions
-
-Respond with ONLY the SQL query, nothing else."""
-
-        response = model.generate_content(prompt)
-        sql = response.text.strip()
-
-        # Determine safety level
-        sql_upper = sql.upper()
-        if "DELETE" in sql_upper or "DROP" in sql_upper:
-            safety = "High Impact"
-        elif "UPDATE" in sql_upper or "INSERT" in sql_upper:
-            safety = "Caution"
-        else:
-            safety = "Safe"
-
-        return {
-            "success": True,
-            "sql": sql,
-            "explanation": f"Generated SQL for: {req.prompt}",
-            "safety": safety
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Gemini API error: {str(e)}")
 
 
 if __name__ == "__main__":
