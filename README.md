@@ -39,11 +39,19 @@ Javi.QL is a browser-based SQL query execution engine with enterprise-grade safe
 - **Per-user tracking** with email-based session management
 - **Execution metrics** (execution time, row counts, status)
 
+### 🤖 AI Query Generator (NEW!)
+- **Natural language to SQL conversion** using Google Gemini API
+- **Multiple model support**: Gemini 3.8 Flash (latest), 3.7, 3.6, 3.5, and 2.5 families
+- **Adjustable temperature** for creativity control
+- **One-click execution** - Use generated queries directly in Query Console
+- **No API key storage** - Enter each time for security
+- **Advanced reasoning** - Handles complex multi-table queries and aggregations
+
 ### 🎨 Modern UI
 - **Dark mode interface** with glassmorphism design
 - **Real-time loading indicators** during operations
 - **Responsive design** supporting desktop and tablet
-- **Tab-based navigation** (Query Console, Inspector, Vault)
+- **Tab-based navigation** (Query Console, Inspector, Vault, AI Generator)
 
 ## 🚀 Quick Start
 
@@ -181,6 +189,36 @@ To package Javi.QL for non-technical teammates:
    - Execution times (ms)
    - Query types (SELECT, UPDATE, DELETE, etc.)
 
+### AI Query Generator (Natural Language to SQL)
+
+1. Open the **"AI Query Generator"** tab
+2. Get your **Gemini API Key**:
+   - Visit: https://aistudio.google.com/app/apikeys
+   - Create a new API key
+   - Paste it in the "Google Gemini API Key" field
+3. Select your preferred **Gemini model**:
+   - **Gemini 3.8 Flash** (Recommended - best for SQL)
+   - **Gemini 3.8 Flash Cyber** (For security queries)
+   - **Gemini 3.7/3.6/3.5 Flash** (Fast alternatives)
+   - **Gemini 2.5 Pro/Flash** (Stable production models)
+4. **Adjust Temperature** (0-1 slider):
+   - Lower (0.0-0.3): Deterministic, precise SQL
+   - Middle (0.5-0.7): Balanced (recommended)
+   - Higher (0.8-1.0): More creative variations
+5. **Write your query in natural language**:
+   ```
+   Example: "Get all users who were created in 2024 
+   and have status='active', ordered by creation date"
+   ```
+6. Click **"Generate Query"** - watch the magic happen! ✨
+7. Review the generated SQL
+8. **Copy to Clipboard** or **Use in Console** to execute it immediately
+
+**Examples:**
+- "Show me the top 10 customers by total order amount"
+- "Find all orders placed last month that haven't been shipped"
+- "List users who logged in within the last 7 days"
+
 ## 🏗️ Project Structure
 
 ```
@@ -219,6 +257,7 @@ JaviIQ/
 - **Tailwind CSS**: Utility-first CSS framework
 - **FontAwesome**: Icon library
 - **SQL.js**: WASM SQLite engine (fallback)
+- **Google Gemini API**: AI-powered natural language to SQL conversion
 
 ## 🔐 Security Features
 
