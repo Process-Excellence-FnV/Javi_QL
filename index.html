@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SafeSQL - Smart Query Console & Auto-Backup Tool</title>
+    <title>Javi.QL - Just in time Automated Versioned Intelligence</title>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -98,6 +98,27 @@
 <body
     class="h-full bg-slate-950 text-slate-100 flex flex-col antialiased overflow-hidden selection:bg-brand-500 selection:text-white">
 
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-[100] flex items-center justify-center hidden">
+        <div class="flex flex-col items-center gap-4">
+            <div class="relative w-16 h-16">
+                <svg class="w-full h-full animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="url(#gradient)" stroke-width="3" stroke-linecap="round" stroke-dasharray="62.8" stroke-dashoffset="15.7" />
+                    <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color: #6366f1; stop-opacity: 1;" />
+                            <stop offset="100%" style="stop-color: #a78bfa; stop-opacity: 1;" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="text-center">
+                <p class="text-slate-300 font-semibold text-sm">Initializing Javi.QL...</p>
+                <p id="loading-message" class="text-slate-500 text-xs mt-1">Connecting to database</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Top Global Header -->
     <header
         class="border-b border-slate-800 bg-slate-900/90 backdrop-blur px-6 py-3 flex items-center justify-between z-30 shrink-0">
@@ -109,14 +130,14 @@
             <div>
                 <div class="flex items-center gap-2">
                     <h1 class="font-extrabold text-lg tracking-tight text-white flex items-center gap-2">
-                        SafeSQL
+                        Javi.QL
                     </h1>
                     <span
                         class="text-[10px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                         <i class="fa-solid fa-bolt text-[9px]"></i> Auto-Backup Active
                     </span>
                 </div>
-                <p class="text-xs text-slate-400">Zero-Loss SQL Execution Engine with Instant CSV Download</p>
+                <p class="text-xs text-slate-400">Just in time Automated Versioned Intelligence</p>
             </div>
         </div>
 
@@ -849,9 +870,10 @@
             const query = editor.value.trim();
             if (!query) return;
 
+            showLoading("Executing query...");
             if (isRealDatabase) {
                 // Execute against real database
-                executeQueryAgainstRealDB(query);
+                await executeQueryAgainstRealDB(query);
             } else {
                 // Execute against local SQLite
                 // 1. Run Auto-Backup check & download
@@ -876,6 +898,7 @@
                     renderErrorMessage(err.message);
                 }
             }
+            hideLoading();
         }
 
         async function executeQueryAgainstRealDB(query) {
@@ -962,6 +985,7 @@
             } catch (err) {
                 renderErrorMessage("Error: " + err.message);
             }
+            hideLoading();
         }
 
         // AI SQL Generator with Real Database Support
@@ -1577,8 +1601,24 @@
             }
         }
 
+        function showLoading(message = "Initializing Javi.QL...") {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                document.getElementById('loading-message').innerText = message;
+                overlay.classList.remove('hidden');
+            }
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+        }
+
         window.onload = async function () {
             console.log("[INIT] Page loaded, initializing...");
+            showLoading("Starting Javi.QL...");
 
             // Get or prompt for user email
             if (!currentUserEmail) {
@@ -1605,6 +1645,7 @@
             // Try to auto-reconnect to saved database
             const savedConn = loadConnectionState();
             if (savedConn.connectionString && savedConn.driver) {
+                showLoading("Reconnecting to database...");
                 console.log("[INIT] Auto-reconnecting to saved database...");
                 try {
                     const response = await fetch(API_BASE + "/connect", {
@@ -1616,6 +1657,7 @@
                         })
                     });
                     if (response.ok) {
+                        showLoading("Loading database schema...");
                         isRealDatabase = true;
                         dbConnectionString = savedConn.connectionString;
                         dbDriver = savedConn.driver;
@@ -1629,8 +1671,10 @@
                 }
             }
 
+            showLoading("Preparing interface...");
             await initApplication();
             console.log("[OK] Initialization complete, attaching event listeners...");
+            hideLoading();
 
             // Run SQL button & Hotkey
             const btnRunSql = document.getElementById('btn-run-sql');
@@ -1826,6 +1870,7 @@
                 const originalText = btn.innerHTML;
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Connecting...';
+                showLoading("Testing database connection...");
 
                 try {
                     const driver = document.getElementById('conn-driver').value;
@@ -1839,12 +1884,14 @@
 
                     if (!testResponse.ok) {
                         const error = await testResponse.json();
+                        hideLoading();
                         alert("❌ Connection failed: " + error.detail);
                         btn.disabled = false;
                         btn.innerHTML = originalText;
                         return;
                     }
 
+                    showLoading("Establishing connection...");
                     // Connect to database
                     const connectResponse = await fetch(API_BASE + "/connect", {
                         method: "POST",
@@ -1854,12 +1901,14 @@
 
                     if (!connectResponse.ok) {
                         const error = await connectResponse.json();
+                        hideLoading();
                         alert("❌ Connection failed: " + error.detail);
                         btn.disabled = false;
                         btn.innerHTML = originalText;
                         return;
                     }
 
+                    showLoading("Loading database schema...");
                     btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Connected!';
 
                     // Save connection for persistence
@@ -1873,6 +1922,7 @@
                     document.getElementById('btn-run-sql').disabled = false;
 
                     await loadRealDatabaseSchema();
+                    hideLoading();
                     document.getElementById('modal-connection').classList.add('hidden');
                     setTimeout(() => {
                         btn.disabled = false;

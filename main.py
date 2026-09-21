@@ -1,6 +1,6 @@
 """
-SafeSQL AI Enterprise - Real Database Backend
-Connects to PostgreSQL, MySQL, SQLite with real-time schema & query execution
+Javi.QL - Just in time Automated Versioned Intelligence
+Real Database Backend - Connects to PostgreSQL, MySQL, SQLite with real-time schema & query execution
 """
 
 from fastapi import FastAPI, HTTPException
@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import sqlalchemy as sa
 from sqlalchemy import inspect, text, create_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import QueuePool
 import json
 from datetime import datetime
 import os
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-app = FastAPI(title="SafeSQL Backend")
+app = FastAPI(title="Javi.QL Backend")
 
 # Enable CORS for frontend communication
 app.add_middleware(
@@ -39,14 +39,27 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "test@213").replace("@", "%40")
 DB_HOST = os.getenv("DB_HOST", "c-picking-blr1.soecbxqsdjgd4v.postgres.cosmos.azure.com")
 DB_PORT = os.getenv("DB_PORT", "6432")
 DB_NAME = os.getenv("DB_NAME", "citus1")
-POSTGRES_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+POSTGRES_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=require&options=-csearch_path%3Dpublic"
 logs_engine = None
 
 def init_logs_db():
     """Initialize PostgreSQL connection and create logs tables"""
     global logs_engine
     try:
-        logs_engine = create_engine(POSTGRES_URL)
+        logs_engine = create_engine(
+            POSTGRES_URL,
+            poolclass=QueuePool,
+            pool_size=3,
+            max_overflow=5,
+            pool_recycle=3600,
+            connect_args={
+                "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "sslmode": "require",
+                "client_encoding": "UTF8"
+            }
+        )
         with logs_engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS Javi_QL_logs (
@@ -210,7 +223,21 @@ async def test_connection(req: TestConnectionRequest):
         if "postgresql" in conn_str and "sslmode" not in conn_str:
             connection_string += "?sslmode=require"
 
-        engine = create_engine(connection_string, poolclass=NullPool, echo=False)
+        engine = create_engine(
+            connection_string,
+            poolclass=QueuePool,
+            pool_size=5,
+            max_overflow=10,
+            pool_recycle=3600,
+            connect_args={
+                "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "sslmode": "require",
+                "client_encoding": "UTF8"
+            },
+            echo=False
+        )
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
 
@@ -235,7 +262,21 @@ async def connect_database(req: ConnectionConfig):
         if "postgresql" in connection_string.lower() and "sslmode" not in connection_string.lower():
             connection_string += "?sslmode=require"
 
-        db_engine = create_engine(connection_string, poolclass=NullPool, echo=False)
+        db_engine = create_engine(
+            connection_string,
+            poolclass=QueuePool,
+            pool_size=5,
+            max_overflow=10,
+            pool_recycle=3600,
+            connect_args={
+                "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "sslmode": "require",
+                "client_encoding": "UTF8"
+            },
+            echo=False
+        )
         db_connection_string = connection_string
 
         # Test connection
