@@ -5,6 +5,7 @@ Real Database Backend - Connects to PostgreSQL, MySQL, SQLite with real-time sch
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import sqlalchemy as sa
@@ -14,6 +15,10 @@ import json
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+import sys
+import threading
+import webbrowser
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -28,6 +33,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def resource_path(relative_path):
+    """Get absolute path to resource — works both as script and frozen exe"""
+    if hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+@app.get("/")
+async def serve_frontend():
+    """Serve the main frontend (index.html)"""
+    return FileResponse(resource_path("index.html"))
 
 # Global database connection
 db_engine = None
@@ -438,9 +456,26 @@ async def get_table_data(req: QueryRequest):
         raise HTTPException(status_code=400, detail=f"Failed to fetch table data: {str(e)}")
 
 
+def open_browser():
+    """Open browser after a short delay to allow server startup"""
+    time.sleep(1.5)
+    webbrowser.open("http://127.0.0.1:8000")
+
 if __name__ == "__main__":
     import uvicorn
+    print("\n" + "="*60)
+    print("[LAUNCH] Javi.QL - Just in time Automated Versioned Intelligence")
+    print("="*60)
     print("[INIT] Initializing Javi_QL logging system...")
     init_logs_db()
     print("[OK] Backend ready!")
+    print("\n[OK] Javi.QL is running on http://127.0.0.1:8000")
+    print("     Your browser will open automatically in a moment...")
+    print("     To stop the server, close this window.")
+    print("="*60 + "\n")
+
+    # Start browser in background thread
+    browser_thread = threading.Thread(target=open_browser, daemon=True)
+    browser_thread.start()
+
     uvicorn.run(app, host="127.0.0.1", port=8000)

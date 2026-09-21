@@ -1,0 +1,4 @@
+# Development dependencies - only needed for building the executable
+# Not required for running the .exe file
+
+pyinstaller==6.1.0

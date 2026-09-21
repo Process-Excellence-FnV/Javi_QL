@@ -47,6 +47,28 @@ Javi.QL is a browser-based SQL query execution engine with enterprise-grade safe
 
 ## 🚀 Quick Start
 
+### For Team Members (No Installation Required)
+
+**Easiest way to use Javi.QL — just download and run!**
+
+1. Download `JaviQL.exe` from your team's shared location
+2. **Double-click** `JaviQL.exe` 
+3. Your browser will automatically open to `http://127.0.0.1:8000`
+4. Start using Javi.QL — no installation, no setup!
+
+**Connection modal:**
+- First time? Click **"No Database Connected"** button
+- Enter your database details (PostgreSQL, MySQL, or SQLite)
+- Click **"Test Connection"** → **"Save Config"**
+- Done! Your config is saved for next time
+
+**Notes:**
+- ⚠️ Windows SmartScreen may show a warning on first run — click **"More info"** → **"Run anyway"** (this is normal for unsigned internal tools)
+- 📁 If you need to connect to a different database, create a `.env` file next to the exe with your database credentials (optional — the connection modal works too)
+- 🛑 To stop the app, close the black console window
+
+### For Developers (With Python)
+
 ### Prerequisites
 - Python 3.8+
 - pip package manager
@@ -89,16 +111,28 @@ Javi.QL is a browser-based SQL query execution engine with enterprise-grade safe
    python main.py
    ```
    
-   The server will start on `http://127.0.0.1:8000`
+   The server will start on `http://127.0.0.1:8000` and auto-open in your browser
 
-5. **Open in browser**
-   - Open `index.html` directly in your browser, or
-   - Serve it via a local server:
-     ```bash
-     # Using Python's built-in server
-     python -m http.server 8001
-     # Then navigate to http://localhost:8001
-     ```
+### Building the Standalone .exe
+
+To package Javi.QL for non-technical teammates:
+
+1. **Install PyInstaller**
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
+2. **Build the executable**
+   ```bash
+   build_exe.bat
+   ```
+   
+   This creates `dist\JaviQL.exe` — a fully self-contained executable
+
+3. **Distribute to teammates**
+   - Copy `dist\JaviQL.exe` to a shared folder, network drive, or zip file
+   - Optionally include a `.env` file for database configuration
+   - Teammates just double-click the exe — no Python, no installation needed!
 
 ## 📖 Usage Guide
 
