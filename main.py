@@ -43,7 +43,7 @@ POSTGRES_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NA
 logs_engine = None
 
 def init_logs_db():
-    """Initialize PostgreSQL connection and create logs table"""
+    """Initialize PostgreSQL connection and create logs tables"""
     global logs_engine
     try:
         logs_engine = create_engine(POSTGRES_URL)
@@ -59,8 +59,22 @@ def init_logs_db():
                     status VARCHAR(20) DEFAULT 'success'
                 )
             """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS Javi_QL_audit_logs (
+                    id SERIAL PRIMARY KEY,
+                    email VARCHAR(255),
+                    action VARCHAR(100),
+                    table_name VARCHAR(100),
+                    rows_count INTEGER,
+                    query TEXT,
+                    query_type VARCHAR(50),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    execution_time FLOAT,
+                    csv_filename VARCHAR(255)
+                )
+            """))
             conn.commit()
-        print("[OK] Javi_QL_logs table initialized")
+        print("[OK] Javi_QL_logs and Javi_QL_audit_logs tables initialized")
     except Exception as e:
         print(f"[WARNING] Could not initialize logs DB: {str(e)}")
 
@@ -81,6 +95,28 @@ def log_query_to_db(email, query, query_type, exec_time):
                 conn.commit()
     except Exception as e:
         print(f"[WARNING] Could not log query: {str(e)}")
+
+def log_audit_event(email, action, table_name, rows_count, query, query_type, exec_time, csv_filename=None):
+    """Store audit log (backup/restore events) in PostgreSQL"""
+    try:
+        if logs_engine:
+            with logs_engine.connect() as conn:
+                conn.execute(text("""
+                    INSERT INTO Javi_QL_audit_logs (email, action, table_name, rows_count, query, query_type, execution_time, csv_filename)
+                    VALUES (:email, :action, :table_name, :rows_count, :query, :query_type, :exec_time, :csv_filename)
+                """), {
+                    "email": email,
+                    "action": action,
+                    "table_name": table_name,
+                    "rows_count": rows_count,
+                    "query": query[:500] if query else None,
+                    "query_type": query_type,
+                    "exec_time": exec_time,
+                    "csv_filename": csv_filename
+                })
+                conn.commit()
+    except Exception as e:
+        print(f"[WARNING] Could not log audit event: {str(e)}")
 
 
 class ConnectionConfig(BaseModel):

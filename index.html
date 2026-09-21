@@ -518,7 +518,37 @@
         let isRealDatabase = false;
         let currentSchema = {};
         let currentUserEmail = localStorage.getItem('userEmail') || null;
+        let dbConnectionString = localStorage.getItem('dbConnectionString') || null;
+        let dbDriver = localStorage.getItem('dbDriver') || null;
         const API_BASE = "http://127.0.0.1:8000/api";
+
+        // Persistence functions
+        function saveConnectionState(connStr, driver) {
+            localStorage.setItem('dbConnectionString', connStr);
+            localStorage.setItem('dbDriver', driver);
+        }
+
+        function loadConnectionState() {
+            return {
+                connectionString: localStorage.getItem('dbConnectionString'),
+                driver: localStorage.getItem('dbDriver')
+            };
+        }
+
+        function saveBackupVault() {
+            localStorage.setItem('backupVault', JSON.stringify(backupVault));
+            localStorage.setItem('totalProtectedRows', totalProtectedRows);
+        }
+
+        function loadBackupVault() {
+            const vault = localStorage.getItem('backupVault');
+            if (vault) {
+                backupVault = JSON.parse(vault);
+                totalProtectedRows = parseInt(localStorage.getItem('totalProtectedRows') || 0);
+                return true;
+            }
+            return false;
+        }
 
         // Base SQL Schema for local SQLite database
         const BASE_SCHEMA_SQL = `
@@ -656,6 +686,7 @@
 
                             backupVault.unshift(vaultItem);
                             totalProtectedRows += values.length;
+                            saveBackupVault();
 
                             // 5. Automatic CSV Trigger (if toggle checked)
                             const autoDownloadChecked = document.getElementById('toggle-auto-download').checked;
@@ -894,6 +925,8 @@
                                     rollbackSql: generateRollbackFromBackup(queryType, tableName, backupResult.columns, backupResult.rows)
                                 };
                                 backupVault.unshift(vaultItem);
+                                totalProtectedRows += backupResult.rows.length;
+                                saveBackupVault();
                                 updateVaultUI();
                             }
                         }
@@ -1545,7 +1578,7 @@
         }
 
         window.onload = async function () {
-            console.log("🔧 Page loaded, initializing...");
+            console.log("[INIT] Page loaded, initializing...");
 
             // Get or prompt for user email
             if (!currentUserEmail) {
@@ -1553,18 +1586,51 @@
                 if (currentUserEmail && currentUserEmail.trim()) {
                     currentUserEmail = currentUserEmail.trim().toLowerCase();
                     localStorage.setItem('userEmail', currentUserEmail);
-                    console.log(`✓ User logged in: ${currentUserEmail}`);
+                    console.log(`[OK] User logged in: ${currentUserEmail}`);
                 } else {
                     currentUserEmail = "anonymous";
-                    console.log("⚠️ No email provided, using anonymous");
+                    console.log("[WARN] No email provided, using anonymous");
                 }
             }
 
             // Update UI with user email
             document.getElementById('user-email-display').textContent = currentUserEmail.split('@')[0] || 'User';
 
+            // Load backup vault from localStorage
+            if (loadBackupVault()) {
+                console.log(`[OK] Loaded ${backupVault.length} backups from storage`);
+                updateVaultUI();
+            }
+
+            // Try to auto-reconnect to saved database
+            const savedConn = loadConnectionState();
+            if (savedConn.connectionString && savedConn.driver) {
+                console.log("[INIT] Auto-reconnecting to saved database...");
+                try {
+                    const response = await fetch(API_BASE + "/connect", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            connection_string: savedConn.connectionString,
+                            driver: savedConn.driver
+                        })
+                    });
+                    if (response.ok) {
+                        isRealDatabase = true;
+                        dbConnectionString = savedConn.connectionString;
+                        dbDriver = savedConn.driver;
+                        console.log("[OK] Auto-reconnected to database!");
+                        await loadRealDatabaseSchema();
+                        updateConnectionStatus("Database Connected", true);
+                        refreshUI();
+                    }
+                } catch (err) {
+                    console.log("[WARN] Auto-reconnect failed: " + err.message);
+                }
+            }
+
             await initApplication();
-            console.log("✓ Initialization complete, attaching event listeners...");
+            console.log("[OK] Initialization complete, attaching event listeners...");
 
             // Run SQL button & Hotkey
             const btnRunSql = document.getElementById('btn-run-sql');
@@ -1796,6 +1862,11 @@
 
                     btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Connected!';
 
+                    // Save connection for persistence
+                    saveConnectionState(connStr, driver);
+                    dbConnectionString = connStr;
+                    dbDriver = driver;
+
                     // Enable SQL editor
                     document.getElementById('sql-editor').disabled = false;
                     document.getElementById('sql-editor').placeholder = "Enter your SQL query here...";
@@ -1818,6 +1889,8 @@
             document.getElementById('btn-clear-vault').addEventListener('click', () => {
                 if (confirm("Clear all backups from vault?")) {
                     backupVault = [];
+                    totalProtectedRows = 0;
+                    saveBackupVault();
                     updateVaultUI();
                 }
             });
